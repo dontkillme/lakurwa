@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>La Kurwa</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<canvas id="game"></canvas>
+
+<div id="hud">
+  <div class="brand">LA KURWA</div>
+  <div class="stat">💰 <span id="hMoney"></span></div>
+  <div class="stat">⭐ <span id="hRep"></span></div>
+  <div class="stat">🕒 <span id="hTime"></span></div>
+  <div class="stat">🍺 <span id="hGuests"></span></div>
+  <div class="stat">🔥 <span data-i18n="hud.rent">Rent</span> <span id="hRent"></span></div>
+  <div class="grp">
+    <button data-speed="0" title="Pause (Space)" data-i18n-title="hud.pauseTip">⏸</button><button data-speed="1" class="on">1×</button><button data-speed="2">2×</button><button data-speed="4">4×</button>
+  </div>
+  <div class="grp">
+    <button data-panel="menu" title="M" data-i18n="hud.menu">Menu</button><button data-panel="staff" title="H" data-i18n="hud.staff">Staff</button><button data-panel="storage" title="I" data-i18n="hud.storage">Storage</button><button id="btnBuild" title="B" data-i18n="hud.build">Build</button>
+  </div>
+  <div class="grp">
+    <button id="btnGame" title="Save, load, options, main menu (Esc)" data-i18n="hud.gameMenu" data-i18n-title="hud.gameMenuTip">☰ Game menu</button>
+  </div>
+</div>
+
+<div id="orderTray"></div>
+<div id="alerts"></div>
+<div id="pStatus"></div>
+<div id="selInfo" class="hidden"></div>
+<div id="log"></div>
+<div id="buildBar" class="hidden"></div>
+<div id="toast" class="hidden"></div>
+<div id="devBadge" class="hidden" title="Developer mode (F2 toggles)" data-i18n-title="dev.badgeTip">DEV
+  <button data-dev="cup" title="T: the character under the mouse (or the selected one) throws a cup" data-i18n="dev.cup" data-i18n-title="dev.cupTip">Cup (T)</button>
+  <button data-dev="order" title="G: the Order of the Holy Flame comes now (real rent visit, schedule unchanged)" data-i18n="dev.order" data-i18n-title="dev.orderTip">Order (G)</button>
+  <button data-dev="merchant" title="N: the merchant comes now" data-i18n="dev.merchant" data-i18n-title="dev.merchantTip">Merchant (N)</button>
+  <button data-dev="thief" title="R: a thief walks into the bar now" data-i18n="dev.thief" data-i18n-title="dev.thiefTip">Thief (R)</button>
+  <button data-dev="heist" title="Shift+R: a heist thief walks in and goes for the storage, ignoring the staff" data-i18n="dev.heist" data-i18n-title="dev.heistTip">Heist (⇧R)</button>
+  <button data-dev="rat" title="Y: a rat comes onto the map now" data-i18n="dev.rat" data-i18n-title="dev.ratTip">Rat (Y)</button>
+  <button data-dev="ratguard" title="Shift+Y: a protector rat comes – guards the storage against thieves even without an altar" data-i18n="dev.ratGuard" data-i18n-title="dev.ratGuardTip">Rat guard (⇧Y)</button>
+  <button data-dev="money" title="+ : 1000 Mariuszki" data-i18n="dev.money" data-i18n-title="dev.moneyTip">+1000 M (+)</button>
+  <button data-dev="piss" title="P: a random guest in the bar pisses on a table (or a rental tent)" data-i18n="dev.piss" data-i18n-title="dev.pissTip">Piss (P)</button>
+  <button data-dev="pisstent" title="Shift+P: a random guest in the bar pisses on a rental tent" data-i18n="dev.pissTent" data-i18n-title="dev.pissTentTip">Piss on tent (⇧P)</button>
+  <button data-dev="prophet" title="X: the crazy prophet comes now" data-i18n="dev.prophet" data-i18n-title="dev.prophetTip">Prophet (X)</button>
+</div>
+
+<div id="panel" class="hidden">
+  <div class="ph"><span id="panelTitle"></span><button id="closePanel">✕</button></div>
+  <div id="panelBody"></div>
+</div>
+
+<div id="loading" class="overlay loading hidden">
+  <div class="loadBox">
+    <div class="logo">LA KURWA</div>
+    <div class="loadTrack"><div id="loadBar"></div></div>
+    <div id="loadText">Loading the wasteland…</div>
+    <div id="loadTip" class="tip"></div>
+  </div>
+</div>
+<div id="start" class="overlay splash hidden">
+  <div class="splashBox">
+    <div class="logo">LA KURWA</div>
+    <div class="tagline" data-i18n="menu.tagline">a bar at the end of the world</div>
+    <div id="splashMenu" class="menu">
+      <button id="mContinue" class="hidden" data-i18n="menu.continue">Continue</button>
+      <button id="mResume" class="hidden" data-i18n="menu.resume">Back to the bar</button>
+      <button id="mNew" data-i18n="menu.new">New game</button>
+      <button id="mLoad" class="hidden" data-i18n="menu.load">Load game</button>
+      <button id="mIntro" data-i18n="menu.intro" data-i18n-title="menu.introTip" title="A short demo: the bot shows the basics">Introduction</button>
+      <div id="startMapRow" class="maprow"><span data-i18n="menu.map">Map:</span> <select id="startMap"></select></div>
+      <button id="mMulti" disabled title="Not available yet" data-i18n-html="menu.multi.html" data-i18n-title="menu.multiTip">Multiplayer <small>coming soon</small></button>
+      <button id="mHelp" data-i18n="menu.help">Help</button>
+      <button id="mAbout" data-i18n="menu.about">About</button>
+      <div id="langRow" class="maprow"><span data-i18n="menu.language">Language:</span> <select id="langSel"></select></div>
+    </div>
+    <div id="splashPage" class="page hidden">
+      <div id="splashPageBody"></div>
+      <button id="splashBack" data-i18n="menu.back">Back</button>
+    </div>
+    <div class="foot" data-i18n="menu.foot">A game by Samlis Coldwind · Art: Kenney (CC0) · Flare artists (CC-BY-SA 3.0) — see About</div>
+  </div>
+</div>
+<div id="over" class="overlay hidden">
+  <div class="box"><h1 data-i18n="over.title">GAME OVER</h1><p id="overMsg"></p><button onclick="LK.newGame()" data-i18n="over.again">Try again</button></div>
+</div>
+
+<script src="js/core.js"></script>
+<script src="js/i18n.js"></script>
+<script src="lang/index.js"></script>
+<script src="js/settings.js"></script>
+<script>LK.LANG_FILES.forEach(f => document.write('<script src="lang/' + f + '.js"><\/script>'));</script>
+<script src="js/consent.js"></script>
+<script src="js/data.js"></script>
+<script src="data/sprites.js"></script>
+<script src="data/items.js"></script>
+<script src="data/furniture.js"></script>
+<script src="maps/index.js"></script>
+<script>LK.MAP_FILES.forEach(f => document.write('<script src="maps/' + f + '.js"><\/script>'));</script>
+<script src="js/serialize.js"></script>
+<script src="js/world.js"></script>
+<script src="js/chars.js"></script>
+<script src="js/economy.js"></script>
+<script src="js/ai.js"></script>
+<script src="js/order.js"></script>
+<script src="js/thief.js"></script>
+<script src="js/tents.js"></script>
+<script src="js/rats.js"></script>
+<script src="js/terrain.js"></script>
+<script src="js/render.js"></script>
+<script src="js/fx.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/loader.js"></script>
+<script src="js/prophet.js"></script>
+<script src="js/intro.js"></script>
+<script src="js/saves.js"></script>
+<script src="js/main.js"></script>
+</body>
+</html>

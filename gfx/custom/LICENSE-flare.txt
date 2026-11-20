@@ -1,0 +1,4 @@
+The desert_*, grass_* and cave_* images in this folder were cut from the Flare tilesets in gfx/
+(tileset_desert.png, grassland_tiles.png, tiled_cave_1.png) by tools/slice_flare.py.
+They keep the original licenses: mostly CC-BY-SA 3.0, partly CC-BY 3.0 / CC0 / public domain.
+Artists and details: gfx/CREDITS.txt. https://creativecommons.org/licenses/by-sa/3.0/
