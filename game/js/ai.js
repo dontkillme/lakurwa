@@ -377,6 +377,7 @@ LK.newJob = (type, data) => Object.assign({ type, phase: 'go', pathed: false }, 
 // ======================================================================
 LK.employeeAI = function (c, dt) {
   if (!c.active) return;
+  if (c.trip && LK.supplyAI(c)) return;                     // on a supply trip (supplies.js)
   const S = LK.state, w = S.world;
   if (c.hostile) { if (c.job && c.job.type !== 'drag') { c.job = null; c.work = null; } LK.fightStep(c, dt); return; }
   if (c.job || c.work) { LK.runJob(c); if (c.job) return; }

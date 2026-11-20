@@ -456,6 +456,17 @@ LK.ui = {
     const info = el.querySelector('#storageInfo');
     if (info) info.onclick = () => { this.storageInfo = !this.storageInfo; this.renderPanel(); };
     el.querySelectorAll('canvas[data-fthumb]').forEach(cv => LK.furnThumb(cv, cv.dataset.fthumb));
+    // send for supplies
+    const sv = this.supply, se = el.querySelector('#supEmp'), sm = el.querySelector('#supMoney'), sh = el.querySelector('#supHours'), sg = el.querySelector('#supGo');
+    if (se) se.onchange = () => { sv.emp = +se.value; };
+    if (sm) sm.onchange = () => { sv.money = Math.max(0, Math.round(+sm.value || 0)); };
+    if (sh) sh.onchange = () => { sv.hours = +sh.value; sv.money = null; this.renderPanel(); };
+    if (sg) sg.onclick = () => {
+      const c = LK.state.chars.find(q => q.id == (se ? se.value : 0));
+      const r = LK.sendForSupplies(c, +sm.value, +sh.value);
+      if (!r.ok) LK.log(T('log.supplyNo.' + r.why), 'warn'); else { sv.money = null; sv.emp = null; }
+      this.renderPanel();
+    };
     el.querySelectorAll('[data-desired]').forEach(inp => inp.onchange = () => {
       const S = LK.state; S.desired = S.desired || {};
       const v = Math.max(0, Math.round(+inp.value || 0));
@@ -467,8 +478,28 @@ LK.ui = {
   refreshStorage() {
     const el = $('panelBody');
     const a = document.activeElement;
-    if (a && a.tagName === 'INPUT' && el.contains && el.contains(a)) return;     // don't redraw while typing a desired amount
+    if (a && (a.tagName === 'INPUT' || a.tagName === 'SELECT') && el.contains && el.contains(a)) return;     // don't redraw while typing / choosing
     if (this.storageHTML() !== this.storageLast) this.storagePanel(el);
+  },
+  // storage window: the "send for supplies" box (Food & drink tab)
+  supply: { emp: null, money: null, hours: 2 },
+  supplyBox() {
+    const S = LK.state, sv = this.supply, need = LK.supplyNeeds();
+    const free = S.chars.filter(LK.canGoForSupplies), away = S.chars.filter(c => c.trip);
+    const nd = need.drink.reduce((a, i) => a + i.n, 0), nf = need.food.reduce((a, i) => a + i.n, 0);
+    const est = LK.supplyEstimate(sv.hours);
+    if (sv.money == null) sv.money = Math.min(Math.floor(S.money), est);
+    let h = '<div class="card supply"><div class="ch"><b>🧺 ' + esc(T('supply.title')) + '</b> <small>' + esc(T('supply.hint')) + '</small></div>';
+    h += '<div class="ch">' + esc(nd || nf ? T('supply.needs', { d: nd, f: nf, est }) : T(away.length ? 'supply.allComing' : 'supply.nothing')) + '</div>';
+    if (free.length && (nd || nf)) {
+      h += '<div class="ch supRow"><select id="supEmp">' + free.map(c => '<option value="' + c.id + '"' + (c.id === sv.emp ? ' selected' : '') + '>' +
+          esc(c.name + ' (' + this.taskName(c.task) + ', ' + T('supply.carries', { kg: c.carryCap }) + ')') + '</option>').join('') + '</select> ' +
+        '<label>' + esc(T('supply.money')) + ' <input type="number" id="supMoney" min="0" step="10" value="' + sv.money + '"> M</label> ' +
+        '<select id="supHours">' + [1, 2, 3, 4].map(n => '<option value="' + n + '"' + (n === sv.hours ? ' selected' : '') + '>' + esc(T(['supply.h1', 'supply.h2', 'supply.h3', 'supply.h4'][n - 1])) + '</option>').join('') + '</select> ' +
+        '<button id="supGo">' + esc(T('supply.go')) + '</button></div>';
+    } else if (!free.length) h += '<div class="ch dim">' + esc(T('supply.noStaff')) + '</div>';
+    for (const c of away) h += '<div class="ch away">' + esc(T(c.trip.state === 'back' ? 'supply.coming' : 'supply.away', { name: c.name, money: c.trip.money, back: LK.supplyBackText(c) })) + '</div>';
+    return h + '</div>';
   },
   storageHTML() {
     const S = LK.state, w = S.world;
@@ -495,6 +526,7 @@ LK.ui = {
       '<button data-stab="' + k + '"' + (this.storageTab === k ? ' class="on"' : '') + '>' + esc(T(key)) + '</button>').join('') + '</div>';
     const tab = this.storageTab;
     if (tab === 'stock') {
+      h += this.supplyBox();
       let rows = '';
       for (const [kind, title] of [['drink', 'storageP.drinks'], ['food', 'storageP.food']]) {
         rows += sect(T(title));

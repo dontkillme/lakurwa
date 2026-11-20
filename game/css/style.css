@@ -223,3 +223,10 @@ table.stab td.de input { width: calc(58px * var(--fs, 1)); text-align: right; }
 #introBox kbd { display: inline-block; min-width: 30px; text-align: center; padding: 3px 8px; margin-right: 4px; border-radius: 6px; background: #f3e6cf; color: #241c14;
   font: bold calc(16px * var(--fs, 1)) sans-serif; box-shadow: 0 3px 0 #c9a070; }
 #introBox #introSkip { position: absolute; top: 8px; right: 10px; font-size: calc(11px * var(--fs, 1)); }
+
+/* send for supplies */
+.card.supply { padding: 8px 10px; }
+.card.supply .ch { margin: 3px 0; }
+.card.supply small { color: #c9b89a; }
+.card.supply input[type=number] { width: calc(80px * var(--fs, 1)); }
+.card.supply .away { color: #9cf; }

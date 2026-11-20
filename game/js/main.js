@@ -126,7 +126,7 @@ LK.charAt = function (sx, sy) {
   const z = LK.cam.z;
   let best = null, bd = -Infinity;
   for (const c of LK.state.chars) {
-    if (c.kind === 'gone' || c.inTent) continue;
+    if (c.kind === 'gone' || c.inTent || c.away) continue;
     const [cx, cy] = LK.toScreen(c.x, c.y);
     const down = c.ko > 0 || c.dragBy;
     const hit = down ? Math.abs(sx - cx) < 45 * z && sy > cy - 30 * z && sy < cy + 8 * z
@@ -350,6 +350,7 @@ LK.step = function (dt) {
     LK.fightDirector(h);
     LK.thiefUpdate(h);
     LK.tentUpdate();
+    LK.supplyUpdate();
     LK.altarWatch();
   }
   // visual effects (thrown cups, particles, popups) run on real time
@@ -498,6 +499,12 @@ LK.boot = function () {
     for (let i = 0; i < 60 * 60 && p.ai.state !== 'preach'; i++) LK.step(1 / 60);
     LK.prophetSay(p, true); p.preachT = 1;
     LK.cam.z = 1.4; LK.centerOn(p.x, p.y); LK.follow = false; LK.ui.setSpeed(0);
+  }
+  if (/supplyshot/.test(location.hash)) {   // dev/screenshots: desired amounts set, the "send for supplies" box in the storage window
+    const S = LK.state;
+    S.desired = { 'stock:beer': 40, 'stock:moonshine': 10, 'stock:bread': 12, 'stock:potatoes': 20, 'stock:rat': 8 };
+    if (/away/.test(location.hash)) { const e = S.chars.find(c => c.kind === 'employee'); if (e) LK.sendForSupplies(e, 250, 3); }
+    LK.ui.storageTab = 'stock'; LK.ui.toggle('storage');
   }
   if (/carryshot/.test(location.hash)) {   // dev/screenshots: the owner just bought at the merchant (barrel), a bartender carrying a chest
     const S = LK.state;

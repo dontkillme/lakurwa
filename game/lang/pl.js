@@ -321,6 +321,29 @@ LK.LANGS.pl = {
   'storageP.col.name': 'Rzecz',
   'storageP.col.amount': 'Ilość',
   'storageP.col.unit': 'Jednostka',
+  'supply.title': 'Wyślij po zapasy',
+  'supply.hint': '– pracownik idzie z pieniędzmi i kupuje to, czego jest mniej niż pożądana ilość (połowa na napoje, połowa na jedzenie)',
+  'supply.needs': 'Brakuje: napojów {d}, jedzenia {f} (około {est} M)',
+  'supply.nothing': 'Niczego nie brakuje – najpierw wpisz pożądane ilości w tabeli poniżej.',
+  'supply.allComing': 'Wszystko, czego brakuje, już ktoś kupuje.',
+  'supply.carries': 'udźwignie {kg} kg',
+  'supply.money': 'pieniądze',
+  'supply.h1': '1 h – szybko, drogo',
+  'supply.h2': '2 h',
+  'supply.h3': '3 h',
+  'supply.h4': '4 h – najtaniej, znajdzie wszystko',
+  'supply.go': 'Wyślij',
+  'supply.noStaff': 'Nie ma kogo wysłać.',
+  'supply.away': '{name} jest na wyprawie po zapasy z {money} M – wróci około {back}.',
+  'supply.coming': '{name} wrócił(a) z wyprawy i niesie zakupy do magazynu.',
+  'say.supplyGo': 'Idę po zapasy!',
+  'say.supplyBack': 'Wróciłem z towarem!',
+  'log.supplyGo': '{name} poszedł/poszła po zapasy z {money} M ({hours} h, powrót około {back}).',
+  'log.supplyBack': '{name} wrócił(a) z zapasami: {items} za {spent} M, reszta {change} M.',
+  'log.supplyEmpty': '{name} wrócił(a) z wyprawy z niczym – reszta {change} M.',
+  'log.supplyNo.nothing': 'Nie ma czego kupić: najpierw wpisz pożądane ilości w oknie magazynu.',
+  'log.supplyNo.money': 'Daj mu trochę pieniędzy na zapasy.',
+  'log.supplyNo.busy': 'Nie może teraz iść.',
   'storageP.col.desired': 'Pożądana',
   'storageP.desiredTip': 'Automatyczne zaopatrzenie: barman, który może robić zakupy, dokupi do tej ilości, gdy przyjdzie handlarz (0 = nigdy)',
   'staffP.canRestock': 'robi zakupy',
@@ -667,7 +690,7 @@ LK.LANGS.pl = {
     '<h3>Magazyn i handlarz</h3><ul>' +
     '<li>Magazyn mieści ograniczoną ilość rzeczy: regały, beczki, skrzynie i kufry w środku dodają miejsca. Gdy kończy się jedzenie lub napoje, pojawia się ostrzeżenie.</li>' +
     '<li>Od czasu do czasu przychodzi handlarz z kilkoma losowymi towarami. Kupione rzeczy zanieś do magazynu.</li>' +
-    '<li>Wpisz <b>pożądane ilości</b> w oknie magazynu i zaznacz barmanowi <b>robi zakupy</b>: raz na wizytę handlarza dokupi, czego brakuje (ceny zależą od jego umiejętności handlu), i odłoży to.</li>' +
+    '<li>Wpisz <b>pożądane ilości</b> w oknie magazynu i zaznacz barmanowi <b>robi zakupy</b>: raz na wizytę handlarza dokupi, czego brakuje (ceny zależą od jego umiejętności handlu), i odłoży to. Możesz też <b>wysłać pracownika po zapasy</b> (okno magazynu): idzie z pieniędzmi, które mu dasz, na 1–4 godziny (dłużej = taniej) i przynosi, ile udźwignie, plus resztę.</li>' +
     '<li>Słupki ringu: z ochroną bójki odbywają się na ringu – tłum to uwielbia i więcej zamawia.</li></ul>' +
     '<h3>Kłopoty</h3><ul>' +
     '<li><b>Złodzieje</b> wyglądają jak zwykli goście. Gdy nikt nie patrzy, zakradają się do magazynu (albo do wynajętego namiotu, albo przez okno magazynu) i szukają towaru i pieniędzy. Pracownik, który ich zobaczy, podnosi alarm, a ochrona atakuje. Znokautuj złodzieja i naciśnij przy nim <b>E</b>, żeby wezwać Zakon: zabiorą go, zwrócą łup i zapłacą 100 M nagrody. Złodziej uderzony w oknie spada z powrotem.</li>' +

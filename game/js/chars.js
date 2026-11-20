@@ -34,7 +34,7 @@ LK.Char = class {
   }
   get tx() { return Math.floor(this.x); }
   get ty() { return Math.floor(this.y); }
-  get active() { return this.ko <= 0 && !this.dragBy; }
+  get active() { return this.ko <= 0 && !this.dragBy && !this.away; }   // away = on a supply trip, off the map
   isStaff() { return this.kind === 'employee' || this.kind === 'player'; }
   say(text, t) {
     t = t || 2.5;

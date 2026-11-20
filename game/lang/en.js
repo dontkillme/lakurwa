@@ -331,6 +331,29 @@ LK.LANGS.en = {
   'storageP.col.name': 'Item',
   'storageP.col.amount': 'Amount',
   'storageP.col.unit': 'Unit',
+  'supply.title': 'Send for supplies',
+  'supply.hint': '– an employee goes out with money and buys what is below the desired amounts (half for drinks, half for food)',
+  'supply.needs': 'Missing: {d} drinks, {f} food (about {est} M)',
+  'supply.nothing': 'Nothing is missing – write desired amounts in the table below first.',
+  'supply.allComing': 'Everything that is missing is already being bought.',
+  'supply.carries': 'carries {kg} kg',
+  'supply.money': 'money',
+  'supply.h1': '1 h – quick, expensive',
+  'supply.h2': '2 h',
+  'supply.h3': '3 h',
+  'supply.h4': '4 h – cheapest, finds everything',
+  'supply.go': 'Send',
+  'supply.noStaff': 'Nobody free to send.',
+  'supply.away': '{name} is on a supply trip with {money} M – back about {back}.',
+  'supply.coming': '{name} is back from the supply trip and carries it to the storage.',
+  'say.supplyGo': 'Off to get supplies!',
+  'say.supplyBack': 'Back with the goods!',
+  'log.supplyGo': '{name} went for supplies with {money} M ({hours} h, back about {back}).',
+  'log.supplyBack': '{name} is back from the supply trip: {items} for {spent} M, {change} M change.',
+  'log.supplyEmpty': '{name} is back from the supply trip with nothing – {change} M change.',
+  'log.supplyNo.nothing': 'Nothing to buy: write desired amounts in the storage window first.',
+  'log.supplyNo.money': 'Give him some money for the supplies.',
+  'log.supplyNo.busy': 'He cannot go now.',
   'storageP.col.desired': 'Desired',
   'storageP.desiredTip': 'Auto-restock: a bartender who may restock buys up to this amount when the merchant comes (0 = never)',
   'staffP.canRestock': 'can restock',
@@ -677,7 +700,7 @@ LK.LANGS.en = {
     '<h3>Storage and the merchant</h3><ul>' +
     '<li>The storage room holds only so much: shelves, barrels, crates and chests inside it add space. A warning pops up when food or drinks run low.</li>' +
     '<li>The merchant comes from time to time with a few random goods. Carry what you buy into the storage room.</li>' +
-    '<li>Write <b>desired amounts</b> in the storage window and tick <b>can restock</b> on a bartender: once per merchant visit he buys what is missing (prices by his vendor skill) and puts it away.</li>' +
+    '<li>Write <b>desired amounts</b> in the storage window and tick <b>can restock</b> on a bartender: once per merchant visit he buys what is missing (prices by his vendor skill) and puts it away. Or <b>send an employee for supplies</b> (storage window): he goes out with the money you give him for 1–4 hours (longer = cheaper) and brings back what he can carry plus the change.</li>' +
     '<li>Ring poles: with security, fights happen in a ring – the crowd loves it and orders more.</li></ul>' +
     '<h3>Trouble</h3><ul>' +
     '<li><b>Thieves</b> look like normal guests. When nobody watches they sneak into the storage room (or a rented tent, or through a storage window) and rummage for goods and cash. Staff who see them raise the alarm, security attacks. Knock a thief out and press <b>E</b> next to him to call the Order: they take him away, return what he stole and pay a 100 M reward. A thief hit while climbing through a window falls back.</li>' +

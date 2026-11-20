@@ -218,7 +218,7 @@ LK.Render = {
       }
     }
     for (const c of S.chars) {
-      if (c.inTent) continue;                                // inside his rental tent
+      if (c.inTent || c.away) continue;                      // inside his rental tent / on a supply trip
       if (c.x < x0 - 1 || c.x > x1 + 2 || c.y < y0 - 1 || c.y > y1 + 2) continue;
       list.push({ d: c.x + c.y + (c.ko > 0 ? -0.3 : 0.02), px: c.x, py: c.y, f: () => this.drawCharacter(ctx, c) });
     }
@@ -398,7 +398,7 @@ LK.Render = {
   },
   drawOverlay(ctx, c) {
     const z = LK.cam.z, S = LK.state;
-    if (c.kind === 'gone' || c.inTent) return;
+    if (c.kind === 'gone' || c.inTent || c.away) return;
     const [sx, sy0] = LK.toScreen(c.x, c.y);
     const top = sy0 - 100 * z;
     if (c.ko > 0) {
