@@ -66,6 +66,11 @@ LK.ui = {
   // ---------------- HUD ----------------
   updateHUD(dt) {
     const S = LK.state;
+    if (this.itemMenu) {                                     // the item went away or the owner walked off: close its menu
+      const m = this.itemMenu, p = m.p;
+      if (!S.world.objects.includes(m.o) || !p.active || S.world.isBar(p.tx, p.ty) ||
+          Math.max(Math.abs(m.o.x - p.tx), Math.abs(m.o.y - p.ty)) > 2) this.closeItemMenu();
+    }
     this.hudT -= dt;
     if (this.hudT > 0) return;
     this.hudT = 0.25;
@@ -457,13 +462,12 @@ LK.ui = {
     if (info) info.onclick = () => { this.storageInfo = !this.storageInfo; this.renderPanel(); };
     el.querySelectorAll('canvas[data-fthumb]').forEach(cv => LK.furnThumb(cv, cv.dataset.fthumb));
     // send for supplies
-    const sv = this.supply, se = el.querySelector('#supEmp'), sm = el.querySelector('#supMoney'), sh = el.querySelector('#supHours'), sg = el.querySelector('#supGo');
-    if (se) se.onchange = () => { sv.emp = +se.value; };
+    const sv = this.supply, se = el.querySelector('#supEmp'), sm = el.querySelector('#supMoney'), sg = el.querySelector('#supGo');
+    if (se) se.onchange = () => { sv.emp = +se.value; this.renderPanel(); };   // the trip time range depends on him
     if (sm) sm.onchange = () => { sv.money = Math.max(0, Math.round(+sm.value || 0)); };
-    if (sh) sh.onchange = () => { sv.hours = +sh.value; sv.money = null; this.renderPanel(); };
     if (sg) sg.onclick = () => {
       const c = LK.state.chars.find(q => q.id == (se ? se.value : 0));
-      const r = LK.sendForSupplies(c, +sm.value, +sh.value);
+      const r = LK.sendForSupplies(c, +sm.value);
       if (!r.ok) LK.log(T('log.supplyNo.' + r.why), 'warn'); else { sv.money = null; sv.emp = null; }
       this.renderPanel();
     };
@@ -482,12 +486,12 @@ LK.ui = {
     if (this.storageHTML() !== this.storageLast) this.storagePanel(el);
   },
   // storage window: the "send for supplies" box (Food & drink tab)
-  supply: { emp: null, money: null, hours: 2 },
+  supply: { emp: null, money: null },
   supplyBox() {
     const S = LK.state, sv = this.supply, need = LK.supplyNeeds();
     const free = S.chars.filter(LK.canGoForSupplies), away = S.chars.filter(c => c.trip);
     const nd = need.drink.reduce((a, i) => a + i.n, 0), nf = need.food.reduce((a, i) => a + i.n, 0);
-    const est = LK.supplyEstimate(sv.hours);
+    const est = LK.supplyEstimate();
     if (sv.money == null) sv.money = Math.min(Math.floor(S.money), est);
     let h = '<div class="card supply"><div class="ch"><b>🧺 ' + esc(T('supply.title')) + '</b> <small>' + esc(T('supply.hint')) + '</small></div>';
     h += '<div class="ch">' + esc(nd || nf ? T('supply.needs', { d: nd, f: nf, est }) : T(away.length ? 'supply.allComing' : 'supply.nothing')) + '</div>';
@@ -495,8 +499,9 @@ LK.ui = {
       h += '<div class="ch supRow"><select id="supEmp">' + free.map(c => '<option value="' + c.id + '"' + (c.id === sv.emp ? ' selected' : '') + '>' +
           esc(c.name + ' (' + this.taskName(c.task) + ', ' + T('supply.carries', { kg: c.carryCap }) + ')') + '</option>').join('') + '</select> ' +
         '<label>' + esc(T('supply.money')) + ' <input type="number" id="supMoney" min="0" step="10" value="' + sv.money + '"> M</label> ' +
-        '<select id="supHours">' + [1, 2, 3, 4].map(n => '<option value="' + n + '"' + (n === sv.hours ? ' selected' : '') + '>' + esc(T(['supply.h1', 'supply.h2', 'supply.h3', 'supply.h4'][n - 1])) + '</option>').join('') + '</select> ' +
         '<button id="supGo">' + esc(T('supply.go')) + '</button></div>';
+      const pick = free.find(c => c.id === sv.emp) || free[0], [lo, hi] = LK.SUPPLY.minutes;
+      h += '<div class="ch dim">' + esc(T('supply.time', { min: LK.fmtMinutes(lo), max: LK.fmtMinutes(LK.supplyMinutes(pick, hi)), skill: Math.round(pick.skills.vendor || 0) })) + '</div>';
     } else if (!free.length) h += '<div class="ch dim">' + esc(T('supply.noStaff')) + '</div>';
     for (const c of away) h += '<div class="ch away">' + esc(T(c.trip.state === 'back' ? 'supply.coming' : 'supply.away', { name: c.name, money: c.trip.money, back: LK.supplyBackText(c) })) + '</div>';
     return h + '</div>';
@@ -698,6 +703,31 @@ LK.ui = {
     };
   },
 
+  // ---------------- item menu (E on an outside item with more than one action) ----------------
+  itemMenu: null,
+  openItemMenu(p, o, acts) {
+    const el = $('itemMenu'), m = LK.input.mouse || [LK.view.w / 2, LK.view.h / 2];
+    this.itemMenu = { p, o };
+    el.innerHTML = '<b>' + esc(LK.furnName(o.type)) + '</b>' +
+      acts.map((a, i) => '<button data-act="' + a + '"><kbd>' + (i + 1) + '</kbd> ' + esc(T('item.' + a)) + '</button>').join('');
+    el.style.left = Math.min(m[0] + 12, LK.view.w - 220) + 'px';
+    el.style.top = Math.min(m[1] + 12, LK.view.h - 40 - 34 * acts.length) + 'px';
+    el.classList.remove('hidden');
+    el.querySelectorAll('[data-act]').forEach(b => b.onclick = () => this.pickItemAction(b.dataset.act));
+    this.itemMenuActs = acts;
+  },
+  pickItemAction(act) {
+    const m = this.itemMenu;
+    if (!m) return;
+    this.closeItemMenu();
+    LK.doItemAction(m.p, m.o, act);
+  },
+  closeItemMenu() {
+    this.itemMenu = null; this.itemMenuActs = null;
+    const el = $('itemMenu');
+    el.classList.add('hidden'); el.innerHTML = '';
+  },
+
   // ---------------- BUILD MODE ----------------
   toggleBuild() {
     this.buildMode = !this.buildMode;
@@ -738,9 +768,13 @@ LK.ui = {
     const b = this.build, h = LK.input.hover;
     if (!h || b.tool !== 'furn' || !b.furn) return;
     const [sx, sy] = LK.toScreen(h[0] + 0.5, h[1] + 0.5);
-    const d = LK.FURNITURE[b.furn];
-    ctx.globalAlpha = 0.6;
-    LK.drawFurn(ctx, d, b.rot, sx, sy, LK.cam.z);
+    const d = LK.FURNITURE[b.furn], bad = !!LK.placeError(b.furn, h[0], h[1]), z = LK.cam.z;
+    if (bad) {                                               // not allowed here: red tile, faint ghost
+      ctx.fillStyle = 'rgba(220,40,30,0.35)';
+      ctx.beginPath(); ctx.moveTo(sx, sy - 32 * z); ctx.lineTo(sx + 64 * z, sy); ctx.lineTo(sx, sy + 32 * z); ctx.lineTo(sx - 64 * z, sy); ctx.closePath(); ctx.fill();
+    }
+    ctx.globalAlpha = bad ? 0.3 : 0.6;
+    LK.drawFurn(ctx, d, b.rot, sx, sy, z);
     ctx.globalAlpha = 1;
   },
   // click in build mode on tile (x,y), fractional (fx,fy)
@@ -750,7 +784,8 @@ LK.ui = {
     if (b.tool === 'furn' && !drag) {
       if (!b.furn || !(S.furn[b.furn] > 0)) return LK.log(T('log.selectFurn'), 'warn');
       if (w.objAt(x, y)) return LK.log(T('log.occupied'), 'warn');
-      if (LK.FURNITURE[b.furn].outdoor && w.room(x, y) !== '.') return LK.log(T('log.outdoorOnly', { name: LK.furnName(b.furn) }), 'warn');
+      const err = LK.placeError(b.furn, x, y);
+      if (err) return LK.log(T(err, { name: LK.furnName(b.furn) }), 'warn');
       if (S.chars.some(c => c.tx === x && c.ty === y && c.kind !== 'gone') && LK.FURNITURE[b.furn].block) return LK.log(T('log.standing'), 'warn');
       w.addObject(b.furn, x, y, b.rot, false);
       S.furn[b.furn]--;
@@ -760,10 +795,9 @@ LK.ui = {
     } else if (b.tool === 'pick' && !drag) {
       const o = w.objAt(x, y);
       if (!o) return;
-      if (LK.FURNITURE[o.type].nosell) return LK.log(T('log.wasteland'), 'warn');
-      if (o.reserved) return LK.log(T('log.inUse'), 'warn');
-      w.removeObject(o); S.furn[o.type] = (S.furn[o.type] || 0) + 1;
-      this.renderBuildBar();
+      const err = LK.takeError(o);
+      if (err) return LK.log(T(err), 'warn');
+      LK.takeItem(o);
     } else if (b.tool === 'room' || b.tool === 'erase') {
       const code = b.tool === 'room' ? b.room : '.';
       const cur = w.room(x, y);
@@ -817,6 +851,15 @@ LK.ui = {
     clearTimeout(this.toastT);
     this.toastT = setTimeout(() => el.classList.add('hidden'), 9000);
   }
+};
+
+// why furniture `type` can't be placed on tile (x,y): a log key, or null when it can.
+// Everything goes inside the bar (B / K / S rooms); `outdoor` furniture (rental tent, rat altar) only outside it.
+LK.placeError = function (type, x, y) {
+  const w = LK.state.world, d = LK.FURNITURE[type];
+  const tiles = [[x, y]].concat((d.parts || []).filter(p => p.tx || p.ty).map(p => [x + (p.tx || 0), y + (p.ty || 0)]));
+  if (d.outdoor) return tiles.some(([a, b]) => w.isBar(a, b)) ? 'log.outdoorOnly' : null;
+  return tiles.every(([a, b]) => w.isBar(a, b)) ? null : 'log.barOnly';
 };
 
 LK.claimLand = function (dir) {

@@ -3,7 +3,7 @@
 // tags: seat|counter|table|cook|fresh|aid|light|decor|music|flat|toilet|storage, tech: skill to build/repair,
 // anchor: auto|tile|bottom, scale (bottom-anchored), big (tile-anchored), dx/dy: pixel offsets, icon: item icon overlay,
 // light: light radius in tiles, speed: cooking speed, vendor: merchant vendor skill needed, nosell: world decoration only,
-// tag rent + outdoor: a tent guests can rent (js/tents.js), placed outside of rooms. tag ratAltar: js/rats.js.
+// placement: furniture goes only inside the bar (B/K/S rooms); outdoor: only outside the bar instead. tag rent: a tent guests can rent (js/tents.js). tag ratAltar: js/rats.js.
 LK.FURNITURE = {
   counter: { name: "Bar counter", sprite: "bookcaseHalfWideEmpty", dirs: ["S", "W", "N", "E"], block: true, tags: ["counter"], price: 560, tech: "tinkering", work: 8 },
   stool: { name: "Barrel stool", sprite: "barrel", dirs: ["E", "S", "W", "N"], block: false, tags: ["seat"], price: 150, tech: "tinkering", work: 3, big: 1.2, scale: 1.25 },
@@ -33,7 +33,7 @@ LK.FURNITURE = {
   brokenTable: { name: "Wrecked table", sprite: "tableChairsBroken", dirs: ["E", "S", "W", "N"], block: true, tags: [], nosell: true },
   campfire: { dirs: [""], block: true, tags: ["cook", "light"], tech: "tinkering", work: 3, big: 0.8, name: "Campfire", sprite: "desert_o064", price: 40, speed: 0.4, light: 2.6 },
   tent: { dirs: [""], block: true, tags: ["decor"], tech: "tinkering", work: 6, big: 0.9, name: "Tent", sprite: "desert_o053", price: 70, parts: [{ sprite: "desert_o057", dx: 66, dy: 4 }] },
-  ratAltar: { dirs: [""], block: true, tags: ["ratAltar"], tech: "tinkering", work: 4, big: 0.8, name: "Rat altar", sprite: "desert_o106", price: 900 },
+  ratAltar: { dirs: [""], block: true, tags: ["ratAltar"], tech: "tinkering", work: 4, big: 0.8, name: "Rat altar", sprite: "desert_o106", price: 900, outdoor: true },
   rentTent: { dirs: [""], block: true, tags: ["rent"], tech: "tinkering", work: 8, big: 0.9, name: "Rental tent", sprite: "desert_o054", price: 500, outdoor: true, parts: [{ sprite: "desert_o058", dx: -69, dy: 0 }] },
   tent2: { dirs: [""], block: true, tags: ["decor"], tech: "tinkering", work: 6, big: 0.9, name: "Patched tent", sprite: "desert_o054", price: 65, parts: [{ sprite: "desert_o058", dx: -69, dy: 0 }] },
   chest: { dirs: [""], block: true, tags: ["storage"], tech: "tinkering", work: 3, big: 0.8, name: "Iron chest", sprite: "desert_o055", price: 35, capacity: 8 },

@@ -253,8 +253,8 @@ LK.altarWatch = function () {
   }
 };
 // the owner puts a bottle of orzechówka on the altar (E next to it); returns true if E was used for that
-LK.stockAltar = function (p) {
-  const S = LK.state, o = LK.ratAltars().find(o => rcheb(o.x, o.y, p.tx, p.ty) <= 1);
+LK.stockAltar = function (p, target) {      // target: a given altar (item menu), else the one next to p
+  const S = LK.state, o = target || LK.ratAltars().find(o => rcheb(o.x, o.y, p.tx, p.ty) <= 1);
   if (!o) return false;
   if (o.stocked) { p.say(LK.t('say.altarFull'), 1.5); return true; }
   if ((S.stock.orzechowka || 0) < 1) { p.say(LK.t('say.altarNoBottle'), 2); LK.log(LK.t('log.altarNoBottle'), 'warn'); return true; }

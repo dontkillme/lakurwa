@@ -20,7 +20,7 @@ LK.ser = {
       '// tags: seat|counter|table|cook|fresh|aid|light|decor|music|flat|toilet|storage, tech: skill to build/repair,\n' +
       '// anchor: auto|tile|bottom, scale (bottom-anchored), big (tile-anchored), dx/dy: pixel offsets, icon: item icon overlay,\n' +
       '// light: light radius in tiles, speed: cooking speed, vendor: merchant vendor skill needed, nosell: world decoration only,\n' +
-      '// tag rent + outdoor: a tent guests can rent (js/tents.js), placed outside of rooms. tag ratAltar: js/rats.js.\n' +
+      '// placement: furniture goes only inside the bar (B/K/S rooms); outdoor: only outside the bar instead. tag rent: a tent guests can rent (js/tents.js). tag ratAltar: js/rats.js.\n' +
       LK.ser.table('LK.FURNITURE', furn);
   },
   itemsFile(ing, goods) {

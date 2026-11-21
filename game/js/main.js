@@ -82,6 +82,13 @@ LK.interact = function (p) {
   const guest = S.orders.filter(o => o.state === 'placed' && !o.worker && o.client.active && LK.dist(o.client.x, o.client.y, p.x, p.y) < 1.8)
     .sort((a, b) => LK.dist(a.client.x, a.client.y, p.x, p.y) - LK.dist(b.client.x, b.client.y, p.x, p.y))[0];
   if (guest) { guest.worker = p; p.job = LK.newJob('serve', { order: guest, phase: 'takeHere' }); return; }
+  // outside the bar: the item under the mouse next to us - take it, or a menu when it has more actions
+  const item = LK.pointedItem(p);
+  if (item) {
+    const acts = LK.itemActions(item);
+    if (acts.length === 1) { LK.doItemAction(p, item, acts[0]); return; }
+    if (acts.length > 1) { LK.ui.openItemMenu(p, item, acts); return; }
+  }
   // the rat altar: put a bottle of orzechówka on it
   if (LK.stockAltar(p)) return;
   const near = tag => w.objsWithTag(tag, true).filter(o => LK.isBeside(p, o) || Math.max(Math.abs(o.x - p.tx), Math.abs(o.y - p.ty)) <= 1)[0];
@@ -110,6 +117,73 @@ LK.interact = function (p) {
   else if (stove) p.say(LK.t('say.nothingToCook'));
   else p.say(LK.t('say.nothingHere'), 1.2);
 };
+
+// ---------------- items outside the bar (E with the mouse on the item's tile) ----------------
+// tile under the mouse (null without a mouse); computed now, the camera may have moved since the last mousemove
+LK.mouseTile = function () {
+  const m = LK.input.mouse;
+  if (!m) return null;
+  const [fx, fy] = LK.toTile(m[0], m[1]);
+  return [Math.floor(fx), Math.floor(fy)];
+};
+// the object standing on tile (x,y): its own tile or the tile of one of its parts
+LK.objOnTile = function (x, y) {
+  const w = LK.state.world;
+  return w.objAt(x, y) || w.objects.find(o => ((LK.FURNITURE[o.type] || {}).parts || []).some(q => (q.tx || q.ty) && o.x + (q.tx || 0) === x && o.y + (q.ty || 0) === y)) || null;
+};
+// the object outside the bar that player p (outside too) points at with the mouse and stands next to, or null
+LK.pointedItem = function (p) {
+  const S = LK.state, w = S.world, h = LK.mouseTile();
+  if (p !== S.player || !h || w.isBar(p.tx, p.ty)) return null;
+  const o = LK.objOnTile(h[0], h[1]);
+  if (!o || w.isBar(o.x, o.y)) return null;
+  const near = (x, y) => Math.max(Math.abs(x - p.tx), Math.abs(y - p.ty)) <= 1;
+  return near(o.x, o.y) || near(h[0], h[1]) ? o : null;
+};
+// what the owner can do with an outside item, in menu order: 'stock' | 'build' | 'repair' | 'clean' | 'take'
+LK.itemActions = function (o) {
+  const d = LK.FURNITURE[o.type] || {}, acts = [];
+  if ((d.tags || []).includes('ratAltar') && o.built && !o.stocked) acts.push('stock');
+  if (!o.built) acts.push('build');
+  else if (o.hp < 100) acts.push('repair');
+  else if (o.dirty) acts.push('clean');
+  if (!d.nosell) acts.push('take');
+  return acts;
+};
+LK.doItemAction = function (p, o, act) {
+  if (!LK.state.world.objects.includes(o)) return;
+  if (act === 'stock') { LK.stockAltar(p, o); return; }
+  if (act === 'take') {
+    const err = LK.takeError(o);
+    if (err) { p.say(LK.t(err), 1.5); return; }
+    LK.takeItem(o);
+    LK.log(LK.t('log.itemTaken', { name: LK.furnName(o.type) }), 'good');
+    return;
+  }
+  p.job = LK.newJob('fix', { target: o });                  // build / repair / clean
+};
+// why object o can't be taken back into the storage: a text key, or null
+LK.takeError = function (o) {
+  const S = LK.state;
+  if ((LK.FURNITURE[o.type] || {}).nosell) return 'log.wasteland';
+  if (o.rent && o.rent.tenant) return 'log.itemRented';
+  if (o.reserved || S.chars.some(c => c.seat === o)) return 'log.inUse';
+  return null;
+};
+// take object o back into the storage (furniture count); jobs aimed at it are dropped
+LK.takeItem = function (o) {
+  const S = LK.state;
+  S.world.removeObject(o);
+  S.furn[o.type] = (S.furn[o.type] || 0) + 1;
+  for (const c of S.chars) if (c.job && (c.job.target === o || c.job.stove === o || c.job.counter === o)) {
+    if (c.job.order && c.job.order.worker === c && c.job.order.state !== 'carry') c.job.order.worker = null;
+    if (c.job.order && c.job.order.state === 'cooking-wait') c.job.order.state = 'kitchen';
+    c.job = null; c.work = null;
+  }
+  if (LK.ui && LK.ui.itemMenu && LK.ui.itemMenu.o === o) LK.ui.closeItemMenu();
+  if (LK.ui && LK.ui.buildMode) LK.ui.renderBuildBar();
+};
+
 LK.playerAttack = function (p) {
   const S = LK.state;
   if (!p.active) return;
@@ -155,6 +229,7 @@ LK.input = {
       this.keys[k] = true;
       if (e.key === 'Shift') this.keys.shift = true;
       const S = LK.state;
+      if (LK.ui.itemMenu && /^[1-9]$/.test(k) && LK.ui.itemMenuActs[+k - 1]) { LK.ui.pickItemAction(LK.ui.itemMenuActs[+k - 1]); return; }   // item menu: number keys
       if (k === 'e') LK.interact(S.player);
       else if (k === 'f') LK.playerAttack(S.player);
       else if (k === 'u' && S.player2) LK.interact(S.player2);
@@ -180,7 +255,8 @@ LK.input = {
       else if (e.key === 'F1') { LK.ui.toggle('help'); e.preventDefault(); }
       else if (k === 'escape') {
         // Esc closes what is open; with nothing open it opens the game menu
-        if (LK.ui.pickPost) LK.ui.endPickPost();
+        if (LK.ui.itemMenu) LK.ui.closeItemMenu();
+        else if (LK.ui.pickPost) LK.ui.endPickPost();
         else if (!LK.ui.panel && !LK.ui.buildMode && !LK.ui.selected) LK.ui.toggle('game');
         else { LK.ui.close(); if (LK.ui.buildMode) LK.ui.toggleBuild(); LK.ui.selected = null; }
       }
@@ -201,6 +277,7 @@ LK.input = {
       const [fx, fy] = LK.toTile(e.clientX, e.clientY);
       const x = Math.floor(fx), y = Math.floor(fy), S = LK.state;
       if (e.button === 1) { this.pan = [e.clientX, e.clientY]; e.preventDefault(); return; }
+      if (LK.ui.itemMenu) LK.ui.closeItemMenu();              // a click on the map closes the item menu
       if (e.button === 2) { if (LK.ui.pickPost) { LK.ui.endPickPost(); return; } this.rightClick(x, y, fx, fy); return; }
       if (LK.ui.pickPost) { LK.ui.setPost(x, y); return; }           // choosing a security post
       if (LK.ui.buildMode) { this.drag = true; LK.ui.buildClick(x, y, fx, fy, false); return; }
@@ -503,7 +580,7 @@ LK.boot = function () {
   if (/supplyshot/.test(location.hash)) {   // dev/screenshots: desired amounts set, the "send for supplies" box in the storage window
     const S = LK.state;
     S.desired = { 'stock:beer': 40, 'stock:moonshine': 10, 'stock:bread': 12, 'stock:potatoes': 20, 'stock:rat': 8 };
-    if (/away/.test(location.hash)) { const e = S.chars.find(c => c.kind === 'employee'); if (e) LK.sendForSupplies(e, 250, 3); }
+    if (/away/.test(location.hash)) { const e = S.chars.find(c => c.kind === 'employee'); if (e) LK.sendForSupplies(e, 250, 260); }
     LK.ui.storageTab = 'stock'; LK.ui.toggle('storage');
   }
   if (/carryshot/.test(location.hash)) {   // dev/screenshots: the owner just bought at the merchant (barrel), a bartender carrying a chest
@@ -554,6 +631,20 @@ LK.boot = function () {
     const old = LK.TENT.rentChance; LK.TENT.rentChance = 1; LK.maybeRentTent(c); LK.TENT.rentChance = old;
     if (tents[1]) tents[1].hp = 70;
     LK.centerOn(tents[0].x, tents[0].y); LK.follow = false; LK.ui.setSpeed(0);
+  }
+  if (/itemshot/.test(location.hash)) {   // dev/screenshots: the owner outside next to a rat altar, its item menu open (+ghost: build ghost of a lamp outside)
+    const S = LK.state, w = S.world, p = S.player, ent = w.entrances()[0];
+    const x = ent.outside[0] + 2, y = ent.outside[1] + 2;
+    const alt = w.addObject('ratAltar', x, y, 0, true); S.stock.orzechowka = 1;
+    p.x = x - 0.5; p.y = y + 0.5; p.path = [];
+    LK.cam.z = 1.4; LK.centerOn(x, y); LK.follow = false; LK.ui.setSpeed(0);
+    if (/ghost/.test(location.hash)) {
+      S.furn.lamp = 1; LK.ui.toggleBuild(); LK.ui.build.furn = 'lamp'; LK.ui.renderBuildBar();
+      LK.input.hover = [x + 1, y - 1];
+    } else {
+      LK.input.mouse = LK.toScreen(x + 0.5, y + 0.5);
+      LK.ui.openItemMenu(p, alt, LK.itemActions(alt));
+    }
   }
   if (/postshot/.test(location.hash)) {   // dev/screenshots: a security guard with a chosen post, selected
     const S = LK.state, w = S.world, a = LK.makeApplicant(); a.task = 'security'; LK.hire(a);
