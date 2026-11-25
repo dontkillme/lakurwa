@@ -87,6 +87,23 @@ LK.LANGS.pl = {
   'opt.default': 'Domyślna',
   'opt.preview': 'Podgląd',
   'opt.sample': 'Muł z pustkowia – 30 M. Gulasz ze szczura znowu w menu!',
+  'opt.touch': 'Sterowanie dotykowe:',
+  'opt.touch.auto': 'Automatycznie (telefony i tablety)',
+  'opt.touch.on': 'Włączone',
+  'opt.touch.off': 'Wyłączone',
+  'touch.joyTip': 'Chodzenie',
+  'touch.walls': 'Ściany',
+  'touch.wallsTip': 'Przezroczyste ściany',
+  'touch.camera': 'Kamera',
+  'touch.cameraTip': 'Kamera z powrotem na właściciela',
+  'touch.rotate': 'Obróć',
+  'touch.rotateTip': 'Obróć (tryb budowy)',
+  'touch.use': 'Użyj',
+  'touch.useTip': 'Użyj: przyjmij zamówienie, mieszaj, gotuj, rozmawiaj albo działaj na polu, na które patrzysz',
+  'touch.attack': 'Bij',
+  'touch.attackTip': 'Atak',
+  'touch.run': 'Bieg',
+  'touch.runTip': 'Bieg wł. / wył. (kosztuje kondycję)',
   'hud.clock': 'Dzień {day} {time}',
   'hud.repTitle': 'Reputacja. Szansa, że podróżny zajrzy: {total} % = reputacja {rep} % + ozdoby {decor} % ({n} w środku, czyste i zbudowane) + wielkość {size} % ({tiles} pól baru)',
   'hud.guests': 'gości: {guests}, zamówień: {orders}',
@@ -676,7 +693,7 @@ LK.LANGS.pl = {
   // ---------------------------------------------------------------- pomoc / o grze (HTML)
   'help.html': '<p>Jesteś nowym właścicielem <b>La Kurwy</b>, baru przy zakurzonej drodze przez pustkowie. Utrzymaj go i nie zbankrutuj – jeśli dwa poranki z rzędu masz długi, tracisz bar. Pierwszy raz? Wybierz <b>Wprowadzenie</b> w menu głównym.</p>' +
     '<h3>Sterowanie</h3><ul>' +
-    '<li><b>WASD</b> chodzenie (przytrzymaj <b>Shift</b>, żeby biec – kosztuje kondycję) · <b>Prawy przycisk</b> idź na pole · <b>Lewy przycisk</b> zaznacz postać</li>' +
+    '<li><b>WASD</b> chodzenie (przytrzymaj <b>Shift</b>, żeby biec – kosztuje kondycję) · <b>Prawy przycisk</b> idź na pole · <b>Lewy przycisk</b> zaznacz postać</li><li><b>Dotyk</b> (telefony, tablety): joystick w lewym dolnym rogu – chodzenie · obok przyciski <b>E</b> / <b>F</b> / <b>Bieg</b> · zaznaczone pole to to, na które patrzy właściciel (biała ramka) · stuknięcie zaznacza · przeciągnięcie przesuwa kamerę · szczypanie przybliża · przytrzymanie – idź tam</li>' +
     '<li><b>E</b> akcja: przyjmij zamówienie gościa obok (albo po drugiej stronie lady) – staje się karteczką u góry po lewej; E przy ladzie miesza napoje, E przy kuchence gotuje (zamówienia zrobione przez ciebie dają premię 1–5 %, maks. 10 M); podaj; buduj / naprawiaj / sprzątaj; handluj z handlarzem; postaw orzechówkę na ołtarzyku szczura; pogadaj z prorokiem; ciągnij nieprzytomnego (E ponownie, żeby puścić); wezwij Zakon do znokautowanego złodzieja</li>' +
     '<li><b>F</b> atakuj najbliższego zadymiarza (nie przez ściany)</li>' +
     '<li><b>M</b> menu i przepisy (napoje, dania, apartamenty) · <b>H</b> pracownicy · <b>I</b> magazyn · <b>B</b> tryb budowy · przycisk <b>Stats</b> (lewy dół) = twoje statystyki</li>' +

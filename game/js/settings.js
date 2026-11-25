@@ -1,10 +1,10 @@
-// La Kurwa - player settings (game menu -> Options): text size. The language is in i18n.js.
+// La Kurwa - player settings (game menu -> Options): text size, touch controls (auto / on / off). The language is in i18n.js.
 // Stored in localStorage ('lakurwa_settings') only after the storage notice was accepted.
 'use strict';
 
 LK.SETTINGS_KEY = 'lakurwa_settings';
 LK.FONT_SCALE = { min: 0.8, max: 1.6, step: 0.05, def: 1 };
-LK.settings = { fontScale: LK.FONT_SCALE.def };
+LK.settings = { fontScale: LK.FONT_SCALE.def, touch: 'auto' };
 LK.fontScale = LK.FONT_SCALE.def;     // used by the canvas texts (render.js): names, labels, speech bubbles
 
 LK.clampFontScale = v => {
@@ -26,6 +26,7 @@ LK.loadSettings = function () {
     }
   } catch (e) { /* ignore broken settings */ }
   LK.settings.fontScale = LK.clampFontScale(LK.settings.fontScale);
+  if (!['auto', 'on', 'off'].includes(LK.settings.touch)) LK.settings.touch = 'auto';
   LK.applySettings();
 };
 LK.saveSettings = function () {

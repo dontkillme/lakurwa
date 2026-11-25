@@ -154,10 +154,14 @@ LK.Render = {
       }
     }
     // hover
-    if (LK.input && LK.input.hover) {
-      const [hx, hy] = LK.input.hover;
+    // touch controls: the selected field is the tile the owner faces (build mode / post picking: the tapped tile)
+    const faced = LK.touchMode && !build && !picking && !LK.splashOpen && S.player && S.player.active;
+    const hov = faced ? LK.facingTile(S.player) : LK.touchMode && !build && !picking ? null : LK.input && LK.input.hover;
+    if (hov) {
+      const [hx, hy] = hov;
       if (w.inb(hx, hy)) {
         if (picking) this.diamond(ctx, hx, hy, w.walkable(hx, hy) ? 'rgba(80,170,255,0.3)' : 'rgba(255,60,60,0.3)', w.walkable(hx, hy) ? '#5af' : '#f55', 2);
+        else if (faced) this.diamond(ctx, hx, hy, 'rgba(255,255,255,0.10)', 'rgba(255,255,255,0.6)', 2);
         else this.diamond(ctx, hx, hy, null, build ? '#ffd24a' : 'rgba(255,255,255,0.35)', 2);
       }
     }

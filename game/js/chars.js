@@ -21,6 +21,7 @@ LK.Char = class {
     this.path = []; this.vx = 0; this.vy = 0;
     this.ko = 0; this.dragBy = null; this.dragging = null;
     this.anim = 'idle'; this.animT = Math.random() * 3; this.flip = false; this.back = false;
+    this.fdx = 1; this.fdy = 1;           // grid facing: toward the viewer (set by face())
     this.work = null; this.job = null; this.carry = null; this.bubble = null;
     this.attackCd = 0; this.hurtT = 0; this.hostile = null; this.weapon = opt.weapon || null;
     this.task = opt.task || 'idle'; this.wage = opt.wage || 0;
@@ -149,6 +150,7 @@ LK.Char = class {
     }
   }
   face(dx, dy) {
+    if (Math.abs(dx) > 0.001 || Math.abs(dy) > 0.001) { this.fdx = dx; this.fdy = dy; }   // grid facing (LK.facingTile)
     const sx = dx - dy, sy = dx + dy;     // screen direction
     if (Math.abs(sx) > 0.01) this.flip = sx < 0;
     this.back = sy < -0.01 && Math.abs(sy) > Math.abs(sx) * 0.5;

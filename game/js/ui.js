@@ -668,7 +668,9 @@ LK.ui = {
       '<label for="optFs">' + esc(T('opt.fontSize')) + '</label><div class="fsRow"><button id="optFsMinus" title="' + esc(T('opt.smaller')) + '">A−</button>' +
       '<input type="range" id="optFs" min="' + F.min + '" max="' + F.max + '" step="' + F.step + '" value="' + LK.settings.fontScale + '">' +
       '<button id="optFsPlus" title="' + esc(T('opt.bigger')) + '">A+</button><span class="fsVal" id="optFsVal">' + pct(LK.settings.fontScale) + '</span>' +
-      '<button id="optFsReset">' + esc(T('opt.default')) + '</button></div></div>' +
+      '<button id="optFsReset">' + esc(T('opt.default')) + '</button></div>' +
+      '<label for="optTouch">' + esc(T('opt.touch')) + '</label><select id="optTouch">' +
+      ['auto', 'on', 'off'].map(v => '<option value="' + v + '"' + (LK.settings.touch === v ? ' selected' : '') + '>' + esc(T('opt.touch.' + v)) + '</option>').join('') + '</select></div>' +
       '<div class="preview"><small>' + esc(T('opt.preview')) + '</small><div>' + esc(T('opt.sample')) + '</div><span class="bubbleDemo">' + esc(T('say.callService')) + '</span></div>' +
       '<div class="gmenu"><button id="optBack">↩ ' + esc(T('menu.back')) + '</button></div>';
     const range = el.querySelector('#optFs'), val = el.querySelector('#optFsVal');
@@ -678,6 +680,7 @@ LK.ui = {
     el.querySelector('#optFsPlus').onclick = () => set(LK.settings.fontScale + F.step);
     el.querySelector('#optFsReset').onclick = () => set(F.def);
     el.querySelector('#optLang').onchange = e => LK.setLang(e.target.value, true);   // re-renders this panel (refreshTexts)
+    el.querySelector('#optTouch').onchange = e => { LK.settings.touch = e.target.value; LK.saveSettings(); if (LK.touch) LK.touch.apply(); };
     el.querySelector('#optBack').onclick = () => { this.gameView = 'main'; this.renderPanel(); };
   },
 
@@ -706,7 +709,7 @@ LK.ui = {
   // ---------------- item menu (E on an outside item with more than one action) ----------------
   itemMenu: null,
   openItemMenu(p, o, acts) {
-    const el = $('itemMenu'), m = LK.input.mouse || [LK.view.w / 2, LK.view.h / 2];
+    const el = $('itemMenu'), m = LK.touchMode ? LK.toScreen(p.x, p.y) : LK.input.mouse || [LK.view.w / 2, LK.view.h / 2];
     this.itemMenu = { p, o };
     el.innerHTML = '<b>' + esc(LK.furnName(o.type)) + '</b>' +
       acts.map((a, i) => '<button data-act="' + a + '"><kbd>' + (i + 1) + '</kbd> ' + esc(T('item.' + a)) + '</button>').join('');

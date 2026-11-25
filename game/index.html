@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <title>La Kurwa</title>
 <link rel="stylesheet" href="css/style.css">
 </head>
@@ -49,6 +49,17 @@
   <button data-dev="prophet" title="X: the crazy prophet comes now" data-i18n="dev.prophet" data-i18n-title="dev.prophetTip">Prophet (X)</button>
 </div>
 
+<div id="touchUI">
+  <div id="joy" title="Walk" data-i18n-title="touch.joyTip"><div id="joyKnob"></div></div>
+  <div id="tKeys">
+    <button data-tkey="v" title="See-through walls" data-i18n-title="touch.wallsTip">V<small data-i18n="touch.walls">Walls</small></button>
+    <button data-tkey="c" title="Camera back on the owner" data-i18n-title="touch.cameraTip">C<small data-i18n="touch.camera">Camera</small></button>
+    <button data-tkey="r" class="hidden" title="Rotate (build mode)" data-i18n-title="touch.rotateTip">R<small data-i18n="touch.rotate">Rotate</small></button>
+    <button data-tkey="e" class="big" title="Use / take the order / interact with the faced field" data-i18n-title="touch.useTip">E<small data-i18n="touch.use">Use</small></button>
+    <button data-tkey="f" class="big" title="Attack" data-i18n-title="touch.attackTip">F<small data-i18n="touch.attack">Hit</small></button>
+    <button data-tkey="run" title="Run on / off (costs stamina)" data-i18n-title="touch.runTip">⇧<small data-i18n="touch.run">Run</small></button>
+  </div>
+</div>
 <div id="panel" class="hidden">
   <div class="ph"><span id="panelTitle"></span><button id="closePanel">✕</button></div>
   <div id="panelBody"></div>
@@ -119,6 +130,7 @@
 <script src="js/supplies.js"></script>
 <script src="js/intro.js"></script>
 <script src="js/saves.js"></script>
+<script src="js/touch.js"></script>
 <script src="js/main.js"></script>
 </body>
 </html>

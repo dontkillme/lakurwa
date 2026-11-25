@@ -236,3 +236,29 @@ table.stab td.de input { width: calc(58px * var(--fs, 1)); text-align: right; }
 #itemMenu b { color: #f0d9a8; padding: 0 2px 2px; }
 #itemMenu button { text-align: left; font-size: calc(12px * var(--fs, 1)); }
 #itemMenu kbd { display: inline-block; min-width: 1.2em; text-align: center; background: #000a; border: 1px solid #7a6040; border-radius: 3px; font-size: 0.85em; }
+
+/* ---------------- touch controls (touch.js; body.touch) ---------------- */
+#touchUI { display: none; }
+body.touch #touchUI { display: block; }
+body.touch.menu-open #touchUI, body.touch.panel-open #touchUI { display: none; }   /* main menu, open windows */
+body.touch canvas#game { touch-action: none; }
+body.touch, body.touch button { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent; }
+body.touch button, body.touch select { touch-action: manipulation; }
+#joy { position: fixed; left: calc(16px + env(safe-area-inset-left, 0px)); bottom: calc(16px + env(safe-area-inset-bottom, 0px)); width: 132px; height: 132px;
+  border-radius: 50%; background: radial-gradient(circle, #0000 40%, #0007 41%), #00000055; border: 2px solid #e8a64099; touch-action: none; z-index: 6; }
+#joyKnob { position: absolute; left: 50%; top: 50%; width: 58px; height: 58px; margin: -29px 0 0 -29px; border-radius: 50%; pointer-events: none;
+  background: radial-gradient(circle at 35% 30%, #f6c878, #c47f22); border: 2px solid #3a2a14; box-shadow: 0 3px 8px #000a; }
+#tKeys { position: fixed; left: calc(16px + 132px + 14px + env(safe-area-inset-left, 0px)); bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+  display: grid; grid-template-columns: repeat(3, 56px); gap: 8px; align-items: end; z-index: 6; }
+#tKeys button { width: 56px; height: 56px; border-radius: 50%; padding: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  background: #000b; border: 2px solid #b0782e; color: #ffe; font-size: 20px; font-weight: 800; line-height: 1; touch-action: none; }
+#tKeys button small { font-size: 9px; font-weight: 600; margin-top: 2px; color: #e8d6b2; }
+#tKeys button.big { border-color: #e8a640; background: #2b2117e8; }
+#tKeys button.on { background: #e8a640; color: #1d1a16; } #tKeys button.on small { color: #1d1a16; }
+#tKeys button:active { transform: scale(0.94); filter: brightness(1.3); }
+/* the bottom left belongs to the joystick: owner status bottom right, log above it, selection info above the joystick */
+body.touch #pStatus { left: auto; right: calc(10px + env(safe-area-inset-right, 0px)); }
+body.touch #log { bottom: calc(10px + 74px * var(--fs, 1)); width: min(calc(300px * var(--fs, 1)), 42vw); max-height: 22vh; }
+body.touch #selInfo { bottom: 168px; max-width: min(calc(340px * var(--fs, 1)), 60vw); }
+body.touch #hud button { min-height: 30px; min-width: 30px; }
+@media (max-width: 760px) { #hud .brand { display: none; } #hud { gap: 5px; padding: 4px 6px; } }

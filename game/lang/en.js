@@ -97,6 +97,23 @@ LK.LANGS.en = {
   'opt.default': 'Default',
   'opt.preview': 'Preview',
   'opt.sample': 'Wasteland mule – 30 M. Rat stew is back on the menu!',
+  'opt.touch': 'Touch controls:',
+  'opt.touch.auto': 'Automatic (phones and tablets)',
+  'opt.touch.on': 'On',
+  'opt.touch.off': 'Off',
+  'touch.joyTip': 'Walk',
+  'touch.walls': 'Walls',
+  'touch.wallsTip': 'See-through walls',
+  'touch.camera': 'Camera',
+  'touch.cameraTip': 'Camera back on the owner',
+  'touch.rotate': 'Rotate',
+  'touch.rotateTip': 'Rotate (build mode)',
+  'touch.use': 'Use',
+  'touch.useTip': 'Use: take an order, mix, cook, talk, or act on the field you face',
+  'touch.attack': 'Hit',
+  'touch.attackTip': 'Attack',
+  'touch.run': 'Run',
+  'touch.runTip': 'Run on / off (costs stamina)',
   'hud.clock': 'Day {day} {time}',
   'hud.repTitle': 'Reputation. Chance that a traveller stops: {total} % = reputation {rep} % + decor {decor} % ({n} items inside, clean and built) + size {size} % ({tiles} tiles of the bar)',
   'hud.guests': '{guests} guests, {orders} orders',
@@ -686,7 +703,7 @@ LK.LANGS.en = {
   // ---------------------------------------------------------------- help / about (HTML)
   'help.html': '<p>You are the new owner of <b>La Kurwa</b>, a bar on a dusty wasteland road. Keep it running and don\'t go broke – if you are in debt two mornings in a row, the bar is lost. New here? Try <b>Introduction</b> in the main menu.</p>' +
     '<h3>Controls</h3><ul>' +
-    '<li><b>WASD</b> walk (hold <b>Shift</b> to run, costs stamina) · <b>Right-click</b> walk to a tile · <b>Left-click</b> select a character</li>' +
+    '<li><b>WASD</b> walk (hold <b>Shift</b> to run, costs stamina) · <b>Right-click</b> walk to a tile · <b>Left-click</b> select a character</li><li><b>Touch</b> (phones, tablets): joystick bottom left walks · <b>E</b> / <b>F</b> / <b>Run</b> buttons next to it · the selected field is the one your owner faces (white frame) · tap selects · drag moves the camera · pinch zooms · long press walks there</li>' +
     '<li><b>E</b> interact: take the order of a guest next to you (or across the counter) – it becomes a ticket at the top left; E at the counter mixes drinks, E at a stove cooks dishes (orders you make yourself earn a 1–5 % bonus, max 10 M); deliver; build / repair / clean; trade with the merchant; put orzechówka on the rat altar; talk to the prophet; drag an unconscious person (E again to drop); call the Order for a knocked-out thief</li>' +
     '<li><b>F</b> attack the nearest troublemaker (not through walls)</li>' +
     '<li><b>M</b> menu & recipes (drinks, dishes, apartments) · <b>H</b> staff & hiring · <b>I</b> storage · <b>B</b> build mode · <b>Stats</b> button (bottom left) = your own stats</li>' +

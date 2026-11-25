@@ -119,8 +119,17 @@ LK.interact = function (p) {
 };
 
 // ---------------- items outside the bar (E with the mouse on the item's tile) ----------------
-// tile under the mouse (null without a mouse); computed now, the camera may have moved since the last mousemove
+// the tile character c faces: his last direction snapped to one of the 8 neighbours
+LK.facingTile = function (c) {
+  const dx = c.fdx || 0, dy = c.fdy || 0;
+  if (!dx && !dy) return [c.tx, c.ty + 1];
+  const a = Math.round(Math.atan2(dy, dx) / (Math.PI / 4)) * Math.PI / 4;
+  return [c.tx + Math.round(Math.cos(a)), c.ty + Math.round(Math.sin(a))];
+};
+// the selected field: on PC the tile under the mouse (null without a mouse; computed now, the camera may have moved
+// since the last mousemove); with touch controls the tile the owner faces (the tapped tile in build mode / post picking)
 LK.mouseTile = function () {
+  if (LK.touchMode && !(LK.ui && (LK.ui.buildMode || LK.ui.pickPost)) && LK.state && LK.state.player) return LK.facingTile(LK.state.player);
   const m = LK.input.mouse;
   if (!m) return null;
   const [fx, fy] = LK.toTile(m[0], m[1]);
@@ -274,27 +283,22 @@ LK.input = {
     });
     cv.addEventListener('mousedown', e => {
       if (LK.intro) return;
-      const [fx, fy] = LK.toTile(e.clientX, e.clientY);
-      const x = Math.floor(fx), y = Math.floor(fy), S = LK.state;
       if (e.button === 1) { this.pan = [e.clientX, e.clientY]; e.preventDefault(); return; }
-      if (LK.ui.itemMenu) LK.ui.closeItemMenu();              // a click on the map closes the item menu
-      if (e.button === 2) { if (LK.ui.pickPost) { LK.ui.endPickPost(); return; } this.rightClick(x, y, fx, fy); return; }
-      if (LK.ui.pickPost) { LK.ui.setPost(x, y); return; }           // choosing a security post
-      if (LK.ui.buildMode) { this.drag = true; LK.ui.buildClick(x, y, fx, fy, false); return; }
-      // select the character under the mouse
-      LK.ui.selected = LK.charAt(e.clientX, e.clientY);
+      this.click(e.clientX, e.clientY, e.button === 2);
     });
     window.addEventListener('mouseup', () => { this.drag = false; this.pan = null; });
-    cv.addEventListener('wheel', e => {
-      const before = LK.toTile(e.clientX, e.clientY);
-      LK.cam.z = LK.clamp(LK.cam.z * (e.deltaY < 0 ? 1.1 : 0.9), 0.35, 1.8);
-      // keep the point under the cursor fixed
-      const z = LK.cam.z;
-      LK.cam.x = (before[0] - before[1]) * LK.TW / 2 * z - (e.clientX - LK.view.w / 2);
-      LK.cam.y = (before[0] + before[1]) * LK.TH / 2 * z - (e.clientY - LK.view.h / 2);
-      LK.follow = false;
-      e.preventDefault();
-    }, { passive: false });
+    cv.addEventListener('wheel', e => { LK.zoomAt(e.clientX, e.clientY, e.deltaY < 0 ? 1.1 : 0.9); e.preventDefault(); }, { passive: false });
+  },
+  // a click (or a tap / long press with touch controls) on the map at screen point (sx,sy)
+  click(sx, sy, right) {
+    const [fx, fy] = LK.toTile(sx, sy);
+    const x = Math.floor(fx), y = Math.floor(fy);
+    if (LK.ui.itemMenu) LK.ui.closeItemMenu();              // a click on the map closes the item menu
+    if (right) { if (LK.ui.pickPost) { LK.ui.endPickPost(); return; } this.rightClick(x, y, fx, fy); return; }
+    if (LK.ui.pickPost) { LK.ui.setPost(x, y); return; }           // choosing a security post
+    if (LK.ui.buildMode) { this.drag = true; LK.ui.buildClick(x, y, fx, fy, false); return; }
+    // select the character under the mouse
+    LK.ui.selected = LK.charAt(sx, sy);
   },
   rightClick(x, y) {
     const S = LK.state, p = S.player, w = S.world;
@@ -305,13 +309,26 @@ LK.input = {
   },
   // keyboard -> grid velocity for a player (screen-relative directions)
   dirFor(up, down, left, right) {
-    let sx = (right ? 1 : 0) - (left ? 1 : 0), sy = (down ? 1 : 0) - (up ? 1 : 0);
+    return this.dirFromScreen((right ? 1 : 0) - (left ? 1 : 0), (down ? 1 : 0) - (up ? 1 : 0));
+  },
+  // screen direction (any length) -> unit grid direction (screen x = gx - gy, screen y = (gx + gy) / 2)
+  dirFromScreen(sx, sy) {
     if (!sx && !sy) return [0, 0];
-    // screen direction -> grid direction (screen x = gx - gy, screen y = (gx + gy) / 2)
     const gx = sx / 2 + sy, gy = sy - sx / 2;
     const l = Math.hypot(gx, gy);
     return [gx / l, gy / l];
-  }
+  },
+  joy: null,          // touch joystick: [sx, sy] screen direction (-1..1), null when released (touch.js)
+  runToggle: false    // touch Run button
+};
+// zoom by factor f keeping the screen point (sx,sy) fixed (mouse wheel, pinch)
+LK.zoomAt = function (sx, sy, f) {
+  const before = LK.toTile(sx, sy);
+  LK.cam.z = LK.clamp(LK.cam.z * f, 0.35, 1.8);
+  const z = LK.cam.z;
+  LK.cam.x = (before[0] - before[1]) * LK.TW / 2 * z - (sx - LK.view.w / 2);
+  LK.cam.y = (before[0] + before[1]) * LK.TH / 2 * z - (sy - LK.view.h / 2);
+  LK.follow = false;
 };
 
 // ---------------- main menu (splash) ----------------
@@ -385,8 +402,10 @@ LK.step = function (dt) {
   const k = LK.input.keys;
   // player 1 keyboard movement
   const p = S.player;
-  const [vx, vy] = LK.input.dirFor(k.w, k.s, k.a, k.d);
-  p.vx = vx; p.vy = vy; p.running = !!k.shift;
+  let [vx, vy] = LK.input.dirFor(k.w, k.s, k.a, k.d);
+  const joy = LK.input.joy;                // touch joystick when no key is held
+  if (!vx && !vy && joy && !LK.intro) [vx, vy] = LK.input.dirFromScreen(joy[0], joy[1]);
+  p.vx = vx; p.vy = vy; p.running = !!k.shift || LK.input.runToggle;
   if (vx || vy) { p.path = []; if (p.job && p.job.type !== 'deliver') { p.job = null; } p.work = null; LK.follow = true; }
   if (S.player2) {
     const q = S.player2;
@@ -458,6 +477,7 @@ LK.loop = function (t) {
   }
   LK.Render.draw();
   LK.ui.updateHUD(dt);
+  if (LK.touchMode) LK.touch.frame();
   requestAnimationFrame(LK.loop);
 };
 
@@ -478,6 +498,7 @@ LK.boot = function () {
   LK.Render.init(cv);
   LK.ui.init();
   LK.input.init(cv);
+  if (LK.touch) LK.touch.init(cv);        // joystick + buttons + map gestures (touch.js)
   // ---- main menu (splash) ----
   const $id = id => document.getElementById(id);
   $id('mNew').onclick = () => { LK.newGame(); LK.hideSplash(); LK.log(LK.t('log.welcome'), 'good'); };
