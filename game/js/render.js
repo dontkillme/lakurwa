@@ -202,6 +202,7 @@ LK.Render = {
         if (!o.built) this.label(ctx, sx, sy - 40 * z, LK.t('label.blueprint'), '#9cf');
         else if (o.hp < 100) this.bar(ctx, sx, sy - 50 * z, o.hp / 100, '#e84');
         if (o.dirty) this.label(ctx, sx, sy - 55 * z, LK.t('label.dirty'), '#dd4');
+        if (def.produce && o.built && o.prod >= 1) this.label(ctx, sx, sy - 70 * z, (def.produce.icon || '') + ' ' + Math.floor(o.prod) + ' ' + LK.prodUnit(def.produce), '#9df', 12);   // ready to gather (produce.js)
       } });
       // extra sprite parts, each sorted by the tile it stands on
       for (const p of def.parts || []) {

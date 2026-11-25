@@ -10,8 +10,11 @@ LK.PROPHET = {
   hintShare: 0.65,          // the rest is nonsense
   spotRange: 7              // his spot: on the road, this close to the entrance
 };
-LK.PROPHET_HINTS = 18;      // lang keys prophet.hint1 .. hint18
-LK.PROPHET_WEIRD = 10;      // prophet.weird1 .. weird10
+// his lines: lang keys prophet.hint1, hint2 … and prophet.weird1 … - counted in English (every language has the same keys),
+// so a new line only needs the next number in the language files
+LK.prophetCount = pool => { const L = (LK.LANGS && LK.LANGS.en) || {}; let n = 0; while (('prophet.' + pool + (n + 1)) in L) n++; return n; };
+Object.defineProperty(LK, 'PROPHET_HINTS', { get: () => LK.prophetCount('hint'), configurable: true });
+Object.defineProperty(LK, 'PROPHET_WEIRD', { get: () => LK.prophetCount('weird'), configurable: true });
 
 LK.isProphet = c => !!(c && c.kind === 'prophet');
 // one of his lines: a hint (not one of the last few) or nonsense

@@ -3,6 +3,9 @@
 var LK = window.LK || {};
 window.LK = LK;
 
+// the game's version (semantic: major.minor.patch) - main menu, About, game menu, saves, release README (tools/build.js)
+LK.VERSION = '1.0.0';
+
 LK.GFX = '../gfx/';
 LK.TW = 128;           // screen tile width at zoom 1
 LK.TH = 64;            // screen tile height at zoom 1

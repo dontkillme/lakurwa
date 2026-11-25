@@ -26,6 +26,29 @@ LK.failOrder = function (o, reason) {
     if (c.ai.state === 'waiting') c.ai = { state: 'seated', thinkT: 3 };
   }
 };
+// worker c stops working on order o (knocked out, fired, away, task changed, job dropped …): someone else can take it.
+// Half-made orders (prep / cooking / carry) give their ingredients back and return to the counter ('bar' = already
+// taken, just mix it) or the kitchen. keepCarry: an order c carries stays with him (the owner delivers it with E).
+LK.releaseOrder = function (o, c, keepCarry) {
+  if (!o || o.state === 'done' || o.state === 'failed' || !LK.state.orders.includes(o)) return;
+  if (c && o.worker !== c && c.carry !== o) return;          // someone else's order by now
+  if (keepCarry && o.state === 'carry' && c && c.carry === o) return;
+  if (['prep', 'cooking', 'carry'].includes(o.state)) LK.refundOrder(o);
+  if (o.worker && o.worker.carry === o) o.worker.carry = null;
+  if (c && c.carry === o) c.carry = null;
+  if (['prep', 'cooking', 'cooking-wait', 'carry'].includes(o.state)) o.state = o.kind === 'drink' ? 'bar' : 'kitchen';
+  o.worker = null;
+};
+// drop what character c is doing right now and release its order (the owner keeps what he carries)
+// a rescue (drag job) that ended before the colleague got to the aid kit: someone else may rescue him
+const rescueEnded = j => { if (j && j.type === 'drag' && !j.delivered && j.victim) j.victim.rescued = false; };
+LK.dropJob = function (c) {
+  rescueEnded(c.job);
+  if (c.job && c.job.order) LK.releaseOrder(c.job.order, c, c.kind === 'player');
+  if (c.carry && c.kind !== 'player') LK.releaseOrder(c.carry, c);
+  if (c.dragging && c.kind !== 'player') LK.dropDrag(c);    // staff drag only as a job (the owner drags by hand with E)
+  c.job = null; c.work = null;
+};
 LK.deliverOrder = function (o, worker) {
   const S = LK.state, c = o.client, r = o.recipe;
   LK.removeOrder(o);
@@ -66,13 +89,20 @@ LK.deliverOrder = function (o, worker) {
   if (worker) worker.gainXp(r.kind === 'drink' ? 'bartending' : 'cooking', 0.5);
 };
 // can `w` (at tile x,y) hand something to client c?  (directly or across a counter)
+// tiles (ax,ay) and (bx,by) are neighbours with no wall between them (straight or around the corner)
+LK.openNeighbour = function (ax, ay, bx, by) {
+  const w = LK.state.world;
+  if (cheb(ax, ay, bx, by) !== 1) return false;
+  return Math.abs(ax - bx) + Math.abs(ay - by) === 1 ? w.edgeOkOnly(ax, ay, bx, by) : !w.wallBetweenDiag(ax, ay, bx, by);
+};
 LK.reachGoal = function (c) {
   const w = LK.state.world, cx = c.tx, cy = c.ty;
-  const counters = w.objsWithTag('counter', true).filter(o => cheb(o.x, o.y, cx, cy) === 1);
+  // across a counter: no wall between the guest and the counter, nor between the counter and the worker
+  const counters = w.objsWithTag('counter', true).filter(o => LK.openNeighbour(o.x, o.y, cx, cy));
   return (x, y) => {
     if (!w.walkable(x, y)) return false;
     if (cheb(x, y, cx, cy) === 1 && (Math.abs(x - cx) + Math.abs(y - cy) === 1 ? w.edgeOkOnly(x, y, cx, cy) : !w.wallBetweenDiag(x, y, cx, cy))) return true;
-    return counters.some(o => cheb(x, y, o.x, o.y) === 1 && !(x === cx && y === cy));
+    return counters.some(o => LK.openNeighbour(x, y, o.x, o.y) && !(x === cx && y === cy));
   };
 };
 LK.canReach = (worker, c) => LK.reachGoal(c)(worker.tx, worker.ty);
@@ -104,6 +134,7 @@ LK.damageObject = function (o, amount) {
 };
 LK.destroyObject = function (o) {
   const S = LK.state, w = S.world, def = LK.FURNITURE[o.type] || { name: o.type };
+  if (o.queue && LK.benchRefundAll) LK.benchRefundAll(o);   // a workbench: its queue goes back into the storage
   w.removeObject(o);
   w.decals.push({ x: o.x, y: o.y, type: 'debris', t: 0 });
   for (const c of S.chars) {
@@ -113,11 +144,7 @@ LK.destroyObject = function (o) {
       // waiting / eating guests just keep standing there; others look for a new seat
       if (c.ai.state === 'seated' || c.ai.state === 'toSeat') { c.ai = { state: 'seek' }; c.path = []; }
     }
-    if (c.job && (c.job.target === o || c.job.stove === o || c.job.counter === o)) {
-      if (c.job.order && c.job.order.worker === c && c.job.order.state !== 'carry') c.job.order.worker = null;
-      if (c.job.order && c.job.order.state === 'cooking-wait') c.job.order.state = 'kitchen';
-      c.job = null; c.work = null;
-    }
+    if (c.job && (c.job.target === o || c.job.stove === o || c.job.counter === o)) LK.dropJob(c);
   }
   LK.log(LK.t('log.destroyed', { name: LK.furnName(o.type) }), 'bad');
   if (LK.ui && LK.ui.buildMode) LK.ui.renderBuildBar();
@@ -138,6 +165,7 @@ function go(c, j, goal, hx, hy) {
   return goal(c.tx, c.ty) ? true : 'fail';
 }
 function skillTime(base, c, skill) { return base / c.speedFactor(skill); }
+LK.jobGo = go; LK.skillTime = skillTime;                    // for jobs defined in other files (craft.js)
 
 LK.JOBS = {
   // take an order at the counter; drinks are mixed and delivered, dishes go to the kitchen
@@ -199,12 +227,13 @@ LK.JOBS = {
         o.client.say(LK.t('say.oneItem', { item: o.recipe.name }), 1.5);
         if (o.kind === 'dish') { o.state = 'kitchen'; o.worker = null; c.gainXp('bartending', 0.2); return 'done'; }
       }
-      if (!LK.consume(o.recipe)) { LK.failOrder(o, 'stock'); c.say(LK.t('say.weAreOut')); return 'done'; }
+      if (!LK.consumeFor(o)) { LK.failOrder(o, 'stock'); c.say(LK.t('say.weAreOut')); return 'done'; }
       o.state = 'prep';
       o.preparedBy = c;
       o.quality = LK.clamp(0.45 + c.skills.bartending / 150 + Object.keys(o.recipe.parts).length * 0.04, 0, 1.2);
       j.phase = 'wait';
       c.startWork(skillTime(2.5 + LK.recipeTotal(o.recipe) * 1.5, c, 'bartending'), LK.t('work.mixing', { item: o.recipe.name }), () => {
+        if (o.state === 'failed') { j.phase = 'carry'; return; }   // the guest left meanwhile: deliver ends at once (o.state stays failed)
         o.state = 'carry'; c.carry = o; j.phase = 'carry';
       });
     } else if (j.phase === 'carry') return LK.JOBS.deliver(c, j);
@@ -219,7 +248,7 @@ LK.JOBS = {
       const r = go(c, j, LK.besideGoal(st), st.x, st.y);
       if (r === 'fail') { o.worker = null; o.state = 'kitchen'; return 'fail'; }
       if (r) {
-        if (!LK.consume(o.recipe)) { LK.failOrder(o, 'stock'); c.say(LK.t('say.noIngredients')); return 'done'; }
+        if (!LK.consumeFor(o)) { LK.failOrder(o, 'stock'); c.say(LK.t('say.noIngredients')); return 'done'; }
         o.state = 'cooking';
         o.preparedBy = c;
         const fresh = LK.state.world.objsWithTag('fresh', true).length ? 0.1 : 0;
@@ -227,6 +256,7 @@ LK.JOBS = {
         j.phase = 'wait';
         const speed = LK.FURNITURE[st.type].speed || 1;
         c.startWork(skillTime(6 + LK.recipeTotal(o.recipe) * 4, c, 'cooking') / speed, LK.t('work.cooking', { item: o.recipe.name }), () => {
+          if (o.state === 'failed') { j.phase = 'carry'; return; }   // the guest left meanwhile
           o.state = 'carry'; c.carry = o; j.phase = 'carry'; c.gainXp('cooking', 0.4);
         }, 'interact');
       }
@@ -235,7 +265,8 @@ LK.JOBS = {
   deliver(c, j) {
     const o = j.order;
     if (!o.client.active || o.state === 'failed') { c.carry = null; return 'done'; }
-    if (!j.goalT || (j.goalT -= 1 / 60) <= 0) { j.goalT = 1.5; j.pathed = false; c.path = []; } // client may move
+    const now = LK.state.simT;                                 // simulation time: the same at every speed (was: -1/60 per call)
+    if (j.goalAt == null || now >= j.goalAt) { j.goalAt = now + 1.5; j.pathed = false; c.path = []; } // client may move
     const r = go(c, j, LK.reachGoal(o.client), o.client.tx, o.client.ty);
     if (r === 'fail') { if ((j.tries = (j.tries || 0) + 1) > 5) { LK.failOrder(o, 'dropped'); return 'fail'; } return; }
     if (r) { c.faceTo(o.client.x, o.client.y); LK.deliverOrder(o, c); return 'done'; }
@@ -261,12 +292,13 @@ LK.JOBS = {
       if (r) {
         j.phase = 'wait';
         let dur, label;
+        const quick = !t.built && t.crafted;                // crafted at the workbench: set up in a few seconds
         if (!t.built) { dur = (def.work || 4) * 2; label = LK.t('work.building', { name: LK.furnName(t.type) }); }
         else if (t.dirty) { dur = 4; label = LK.t('work.scrubbing', { name: LK.furnName(t.type) }); }
         else { dur = (100 - t.hp) / 10 + 1; label = LK.t('work.repairing', { name: LK.furnName(t.type) }); }
         // electric devices need at least a bit of electric skill
         if (skill === 'electric' && c.skills.electric < 5) dur *= 2.5;
-        c.startWork(skillTime(dur, c, skill), label, () => {
+        c.startWork(quick ? LK.CRAFT.placeTime : skillTime(dur, c, skill), label, () => {
           if (!t.built) { t.built = true; LK.log(LK.t('log.built', { who: c.name, name: LK.furnName(t.type) }), 'good'); }
           t.hp = 100; t.dirty = 0;
           c.gainXp(skill, 0.8);
@@ -292,7 +324,7 @@ LK.JOBS = {
       if (!c.dragging) return 'done';
       const r = go(c, j, j.dest, j.hx, j.hy);
       if (r === 'fail') { LK.dropDrag(c); return 'fail'; }
-      if (r) { LK.dropDrag(c); if (v.kind === 'client') { v.thrownOut = true; } return 'done'; }
+      if (r) { LK.dropDrag(c); j.delivered = true; if (v.kind === 'client') { v.thrownOut = true; } return 'done'; }
     }
   },
   ring(c, j) {
@@ -366,7 +398,8 @@ LK.runJob = function (c) {
   if (!j || c.work) return;
   const r = LK.JOBS[j.type](c, j);
   if (r === 'done' || r === 'fail') {
-    if (r === 'fail' && j.order && j.order.worker === c && j.order.state !== 'carry') j.order.worker = null;
+    rescueEnded(j);
+    if (r === 'fail' && j.order) LK.releaseOrder(j.order, c, c.kind === 'player');
     c.job = null;
   }
 };
@@ -379,7 +412,7 @@ LK.employeeAI = function (c, dt) {
   if (!c.active) return;
   if (c.trip && LK.supplyAI(c)) return;                     // on a supply trip (supplies.js)
   const S = LK.state, w = S.world;
-  if (c.hostile) { if (c.job && c.job.type !== 'drag') { c.job = null; c.work = null; } LK.fightStep(c, dt); return; }
+  if (c.hostile) { if (c.job && c.job.type !== 'drag') LK.dropJob(c); LK.fightStep(c, dt); return; }
   if (c.job || c.work) { LK.runJob(c); if (c.job) return; }
   // a restock trip (LK.startRestock) or goods still on his back: that first
   if (c.restockFor) { const m = c.restockFor; c.restockFor = null; c.say(LK.t('say.restockGo'), 2); c.job = LK.newJob('restock', { merchant: m }); return; }
@@ -422,7 +455,7 @@ LK.employeeAI = function (c, dt) {
     if (st && !LK.isBeside(c, st) && !c.path.length) c.goAdjacent(st.x, st.y, true);
     return;
   } else if (t === 'maintenance') {
-    const job = LK.findFixJob(c);
+    const job = LK.findFixJob(c) || (LK.findActionJob && LK.findActionJob(c)) || (LK.findCraftJob && LK.findCraftJob(c));   // nothing to fix: gather (produce.js), then the workbench queue
     if (job) { c.job = job; return; }
   } else if (t === 'security') {
     if (LK.securityAI(c)) return;
@@ -459,7 +492,7 @@ LK.securityAI = function (c) {
   const busy = new Set(S.chars.filter(o => o !== c && o.job).map(o => o.job.victim || o.job.client || o.job.fighter || o.job.thief));
   // a thief was spotted: get him
   const thief = S.chars.filter(o => LK.knownThief(o) && o.active).sort((a, b) => LK.dist(a.x, a.y, c.x, c.y) - LK.dist(b.x, b.y, c.x, c.y))[0];
-  if (thief) { if (c.job) { c.job = null; c.work = null; } c.hostile = thief; c.say(LK.t('say.stopThief')); return true; }
+  if (thief) { if (c.job) LK.dropJob(c); c.hostile = thief; c.say(LK.t('say.stopThief')); return true; }
   // a rat in the building (not the altar's guardian): chase it off
   if (!LK.altarActive()) {           // stocked altar: the rats are friends
     const rat = S.chars.find(o => o.kind === 'rat' && !o.guardian && o.active && o.ai.state !== 'flee' && w.isBar(o.tx, o.ty) && LK.dist(o.x, o.y, c.x, c.y) < 8);
@@ -570,6 +603,13 @@ LK.fightStarted = function (c) {
   if (c.order) LK.failOrder(c.order);
   LK.releaseSeat(c);
 };
+// keep a fighter inside the ropes - but never onto a blocked tile or through a wall
+const ringClamp = (c, x0, x1, y0, y1) => {
+  const nx = LK.clamp(c.x, x0, x1), ny = LK.clamp(c.y, y0, y1);
+  if (nx === c.x && ny === c.y) return;
+  const w = LK.state.world, tx = Math.floor(nx), ty = Math.floor(ny);
+  if ((tx === c.tx && ty === c.ty) || (cheb(tx, ty, c.tx, c.ty) === 1 && w.walkable(tx, ty) && w.canStep(c.tx, c.ty, tx, ty))) { c.x = nx; c.y = ny; }
+};
 LK.makeRing = function (f) {
   const S = LK.state;
   const opp = f.hostile;
@@ -579,7 +619,7 @@ LK.makeRing = function (f) {
   LK.log(LK.t('log.ringUp'), 'good');
   for (const id of S.ring.ids) {
     const c = S.chars.find(o => o.id === id);
-    if (c) { c.x = LK.clamp(c.x, cx - 1, cx + 1.9); c.y = LK.clamp(c.y, cy - 1, cy + 1.9); }
+    if (c) ringClamp(c, cx - 1, cx + 1.9, cy - 1, cy + 1.9);
   }
 };
 // runs every frame
@@ -595,7 +635,7 @@ LK.fightDirector = function (dt) {
     R.t += dt;
     const inR = R.ids.map(id => S.chars.find(c => c.id === id)).filter(Boolean);
     // fighters stay inside the ropes
-    for (const c of inR) if (c.active) { c.x = LK.clamp(c.x, R.x - 0.9, R.x + 1.9); c.y = LK.clamp(c.y, R.y - 0.9, R.y + 1.9); }
+    for (const c of inR) if (c.active) ringClamp(c, R.x - 0.9, R.x + 1.9, R.y - 0.9, R.y + 1.9);
     const done = inR.length < 2 || inR.some(c => c.ko > 0) || !inR.some(c => c.hostile) || R.t > 45;
     if (done) {
       const winner = inR.find(c => c.active);
@@ -628,7 +668,7 @@ LK.fightDirector = function (dt) {
     for (const f of loose) {
       if (S.simT - f.fightStart < 6 || contained) continue;   // fights older than 6 s spread
       for (const o of S.chars) {
-        if (o.kind !== 'client' || o.hostile || !o.active || o.mood > 55 || LK.dist(o.x, o.y, f.x, f.y) > 6) continue;
+        if (o.kind !== 'client' || o.hostile || !o.active || o.inTent || o.mood > 55 || LK.dist(o.x, o.y, f.x, f.y) > 6) continue;   // a tenant in his tent doesn't see it
         if (Math.random() < 0.12) {
           o.hostile = Math.random() < 0.5 ? f : (f.hostile || f);
           if (o.hostile === o) o.hostile = f;
@@ -686,6 +726,7 @@ LK.clientLeave = function (c) {
     c.recorded = true;
     S.rep = LK.clamp(S.rep * 0.9 + LK.clamp(c.mood, 0, 100) * 0.1, 0, 100);
     S.today.clients++;
+    if (LK.maybeGiftPlan) LK.maybeGiftPlan(c);               // a happy guest may leave a plan (craft.js)
   }
   c.ai = { state: 'toExit' };
   c.path = [];
@@ -719,7 +760,7 @@ LK.getAngry = function (c) {
   if (act === 'leave') { c.say(LK.t('say.leaveAngry')); LK.clientLeave(c); }
   else if (act === 'fight') {
     const staff = S.chars.filter(o => o.isStaff() && o.active && LK.dist(o.x, o.y, c.x, c.y) < 12);
-    const others = S.chars.filter(o => o.kind === 'client' && o !== c && o.active && LK.dist(o.x, o.y, c.x, c.y) < 6);
+    const others = S.chars.filter(o => o.kind === 'client' && o !== c && o.active && !o.inTent && LK.dist(o.x, o.y, c.x, c.y) < 6);
     const t = staff.length && Math.random() < 0.6 ? LK.pick(staff) : others.length ? LK.pick(others) : staff[0];
     if (!t) { LK.clientLeave(c); return; }
     c.say(LK.t('say.fightAngry'));
@@ -802,8 +843,8 @@ LK.clientAI = function (c, dt) {
       else {
         const t = w.randomFree('B', (x, y) => !S.chars.some(q => q.tx === x && q.ty === y));
         if (t) c.goTo(t[0], t[1]);
-        a.state = 'stand'; a.standT = 0;
-        c.say(LK.t('say.noSeats'));
+        if (a.standT == null) { a.standT = 0; c.say(LK.t('say.noSeats')); }   // the time standing counts on across re-seeks
+        a.state = 'stand';
       }
       break;
     }

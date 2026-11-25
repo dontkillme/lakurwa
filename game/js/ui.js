@@ -43,8 +43,12 @@ LK.ui = {
     LK.state.speed = s;
     document.querySelectorAll('[data-speed]').forEach(b => b.classList.toggle('on', +b.dataset.speed === s));
   },
+  // one window at a time: opening a window ends build mode (except its own Map file window)
   toggle(name) {
     if (this.panel === name) return this.close();
+    if (this.buildMode && name !== 'map') this.toggleBuild();
+    if (this.pickPost) this.endPickPost();                     // choosing a post ends too
+    if (this.itemMenu) this.closeItemMenu();
     this.panel = name;
     if (name === 'game') this.gameView = 'main';
     $('panel').classList.remove('hidden');
@@ -52,7 +56,7 @@ LK.ui = {
   },
   close() { this.panel = null; $('panel').classList.add('hidden'); },
   renderPanel() {
-    const fn = { menu: this.menuPanel, staff: this.staffPanel, storage: this.storagePanel, shop: this.shopPanel, help: this.helpPanel, map: this.mapPanel, game: this.gamePanel, stats: this.statsPanel, saves: this.savesPanel }[this.panel];
+    const fn = { menu: this.menuPanel, staff: this.staffPanel, storage: this.storagePanel, shop: this.shopPanel, help: this.helpPanel, map: this.mapPanel, game: this.gamePanel, stats: this.statsPanel, saves: this.savesPanel, bench: this.benchPanel, devitems: this.devItemsPanel }[this.panel];
     if (!fn) return;
     $('panelTitle').textContent = T(this.panel === 'game' && this.gameView === 'options' ? 'panel.options' : this.panel === 'saves' ? 'panel.saves.' + this.savesMode : 'panel.' + this.panel);
     $('panelBody').innerHTML = '';
@@ -102,6 +106,7 @@ LK.ui = {
     this.updateSelected();
     this.updateTray();
     if (this.panel === 'shop') { if ((this.panelT = (this.panelT || 0) + 1) % 8 === 0) this.renderPanel(); }
+    if (this.panel === 'bench') this.refreshBench();
     if (this.panel === 'storage') { if ((this.panelT = (this.panelT || 0) + 1) % 8 === 0) this.refreshStorage(); }
     if (this.panel === 'staff' || this.panel === 'stats') { if ((this.panelT = (this.panelT || 0) + 1) % 8 === 0) this.refreshStaffBars(); }
   },
@@ -112,6 +117,7 @@ LK.ui = {
     const top = $('hud').getBoundingClientRect().bottom;
     el.style.top = (top + 4) + 'px';
     $('panel').style.top = (top + 2) + 'px';                  // the top bar wraps with bigger text: windows start below it
+    const bb = $('buildBar'); bb.style.top = (top + 2) + 'px'; bb.style.maxHeight = 'calc(100vh - ' + Math.round(top + 160) + 'px)';   // never over the top bar's buttons (phones)
     $('panel').style.maxHeight = 'calc(100vh - ' + Math.round(top + (LK.intro ? 230 : 120)) + 'px)';   // the introduction's caption needs room
     const status = o => {
       const who = o.worker ? ' – ' + o.worker.name.split(' ')[0] : '';
@@ -193,7 +199,7 @@ LK.ui = {
     if (el.dataset.cid != c.id || !el.contains(document.activeElement)) {
       el.innerHTML = h; el.dataset.cid = c.id;
       const sel = $('selTask');
-      if (sel) sel.onchange = () => { c.task = sel.value; c.job = null; c.work = null; c.wage = LK.wageFor(c); LK.log(T('log.taskChanged', { name: c.name, task: this.taskName(c.task) })); el.dataset.cid = ''; };
+      if (sel) sel.onchange = () => { LK.dropJob(c); c.task = sel.value; c.wage = LK.wageFor(c); LK.log(T('log.taskChanged', { name: c.name, task: this.taskName(c.task) })); el.dataset.cid = ''; };
       this.bindPostButtons(el);
       const arr = $('selArrest');
       if (arr) arr.onclick = () => { LK.callArrest(c, LK.state.player); el.dataset.cid = ''; };
@@ -213,7 +219,9 @@ LK.ui = {
       (this.menuInfo ? '<div class="infoTip">' + T('menuP.hint') + '<br>' + T('menuP.hintPrice') + '</div>' : '') +
       '<div class="tabs">' + [['drink', 'menuP.tab.drink'], ['dish', 'menuP.tab.dish'], ['tent', 'menuP.tab.tent']].map(([k, key]) =>
         '<button data-mtab="' + k + '"' + (tab === k ? ' class="on"' : '') + '>' + esc(T(key, { n: k === 'tent' ? LK.rentTents(false).length : all(k) })) + '</button>').join('') + '</div>' +
-      (tab === 'tent' ? '<div id="apartments"></div>' : '<div class="row"><button id="addRecipe">' + esc(T(tab === 'drink' ? 'menuP.newDrink' : 'menuP.newDish')) + '</button></div><div id="recipes"></div>');
+      (tab === 'tent' ? '<div id="apartments"></div>' : '<div class="row"><button id="addRecipe">' + esc(T(tab === 'drink' ? 'menuP.newDrink' : 'menuP.newDish')) + '</button>' +
+        (LK.hasStaffFor(tab) ? ' <button id="inventRecipes" title="' + esc(T('menuP.inventTip.' + tab)) + '">' + esc(T('menuP.invent.' + tab)) + '</button>' : '') +
+        '</div><div id="recipes"></div>');
     el.innerHTML = h;
     el.querySelectorAll('[data-mtab]').forEach(b => b.onclick = () => { this.menuTab = b.dataset.mtab; this.renderPanel(); });
     el.querySelector('#menuInfo').onclick = () => { this.menuInfo = !this.menuInfo; this.renderPanel(); };
@@ -223,8 +231,14 @@ LK.ui = {
         : { name: T('menuP.newDishName'), kind: 'dish', price: 15, parts: { potatoes: 0.5 }, enabled: false });
       this.renderPanel();
     };
+    const inv = el.querySelector('#inventRecipes');
+    if (inv) inv.onclick = () => {
+      const res = LK.inventRecipes(tab);
+      if (!res.ok && res.why === 'nobody') LK.log(T('log.inventNobody.' + tab), 'warn');
+      this.renderPanel();
+    };
     const box = el.querySelector('#recipes');
-    const list = S.recipes.filter(r => r.kind === tab);
+    const list = LK.state.recipes.filter(r => r.kind === tab);
     if (!list.length) box.innerHTML = '<p class="dim">' + esc(T('menuP.none')) + '</p>';
     list.forEach(r => box.appendChild(this.recipeCard(r)));
   },
@@ -271,7 +285,8 @@ LK.ui = {
         num(T('menuP.n.sold'), r.soldToday || 0) + '</div></div>' +
       '<div class="cbody"><div class="ch"><input class="rname" value="' + esc(r.name) + '"> ' +
         '<label class="sw"><input type="checkbox" class="ren"' + (r.enabled ? ' checked' : '') + '> ' + esc(T('menuP.onMenu')) + '</label>' +
-        (left < 1 ? ' <b class="bad">' + esc(T('menuP.out')) + '</b>' : '') + '</div>' +
+        (left < 1 ? ' <b class="bad">' + esc(T('menuP.out')) + '</b>' : '') +
+        (r.auto ? ' <span class="chip auto" title="' + esc(T('menuP.byStaffTip')) + '">' + esc(T('menuP.byStaff', { name: r.auto.by })) + '</span>' : '') + '</div>' +
         '<div class="ch">' + esc(T('menuP.price')) + ' <input type="number" class="rprice" min="1" value="' + r.price + '"> M ' +
         '<span class="pcheck ' + lvl + '" title="' + esc(T('menuP.priceTip', { fair: Math.round(fair), pct: Math.round(r.price / fair * 100), buy: Math.round(LK.priceAcceptance(r) * 100) })) + '">' + esc(T('menuP.lvl.' + lvl, { buy: Math.round(LK.priceAcceptance(r) * 100) })) + '</span> ' +
         '<span class="chips">' + taste + '</span></div>' +
@@ -287,18 +302,19 @@ LK.ui = {
           .filter(([k, x]) => (x.kind === 'drink') === (r.kind === 'drink') && !(k in r.parts)).map(([k, x]) => '<option value="' + k + '">' + esc(LK.ingName(k)) + ' (' + esc(this.tasteName(x.type)) + ')</option>').join('') +
         '</select></td></tr></tbody></table></div>' +
       '<div class="act"><button class="rdel" title="' + esc(T('menuP.delete')) + '">✕</button></div>';
-    d.querySelector('.rname').onchange = e => { r.name = e.target.value || T('menuP.unnamed'); };
+    const mine = () => { if (r.auto) { delete r.auto; this.renderPanel(); } };   // edited by the player: his recipe now (never replaced)
+    d.querySelector('.rname').onchange = e => { r.name = e.target.value || T('menuP.unnamed'); mine(); };
     d.querySelector('.ren').onchange = e => { r.enabled = e.target.checked; this.renderPanel(); };
-    d.querySelector('.rdel').onclick = () => { S.recipes.splice(S.recipes.indexOf(r), 1); this.renderPanel(); };
-    d.querySelector('.rprice').onchange = e => { r.price = Math.max(1, Math.round(+e.target.value || 1)); this.renderPanel(); };
+    d.querySelector('.rdel').onclick = () => { const R = LK.state.recipes; if (R.includes(r)) R.splice(R.indexOf(r), 1); this.renderPanel(); };
+    d.querySelector('.rprice').onchange = e => { r.price = Math.max(1, Math.round(+e.target.value || 1)); delete r.auto; this.renderPanel(); };
     d.querySelectorAll('.ings input[data-k]').forEach(inp => inp.onchange = () => {
-      r.parts[inp.dataset.k] = LK.clamp(Math.round((+inp.value || 0.1) * 10) / 10, 0.1, 2); this.renderPanel();
+      r.parts[inp.dataset.k] = LK.clamp(Math.round((+inp.value || 0.1) * 10) / 10, 0.1, 2); delete r.auto; this.renderPanel();
     });
     d.querySelectorAll('[data-rm]').forEach(b => b.onclick = () => {
       if (Object.keys(r.parts).length <= 1) return LK.log(T('log.needIngredient'), 'warn');
-      delete r.parts[b.dataset.rm]; this.renderPanel();
+      delete r.parts[b.dataset.rm]; delete r.auto; this.renderPanel();
     });
-    d.querySelector('.addp').onchange = e => { if (e.target.value) { r.parts[e.target.value] = 0.5; this.renderPanel(); } };
+    d.querySelector('.addp').onchange = e => { if (e.target.value) { r.parts[e.target.value] = 0.5; delete r.auto; this.renderPanel(); } };
     return d;
   },
 
@@ -372,6 +388,15 @@ LK.ui = {
     el.textContent = T('post.pick', { name: c.name });
     el.classList.remove('hidden');
   },
+  // a new / loaded game: no mode of the old game survives (post picking, build mode, item menu, selection, touch)
+  resetModes() {
+    this.endPickPost();
+    if (this.itemMenu) this.closeItemMenu();
+    if (this.buildMode) this.toggleBuild();
+    this.selected = null; this.statsFor = null;
+    if (LK.input) { LK.input.drag = false; LK.input.pan = null; LK.input.joy = null; LK.input.runToggle = false; }
+    if (LK.touch && LK.touch.release) LK.touch.release();
+  },
   endPickPost() {
     this.pickPost = null;
     const el = $('pickBanner'); if (el) el.classList.add('hidden');
@@ -380,7 +405,7 @@ LK.ui = {
     const c = this.pickPost, w = LK.state.world;
     if (!c) return false;
     if (!w.inb(x, y) || !w.walkable(x, y) || w.pathTo(c.tx, c.ty, x, y) === null) { LK.log(T('log.postBad'), 'warn'); return false; }
-    c.guardPost = { x, y }; c.path = []; c.job = null;
+    c.guardPost = { x, y }; c.path = []; LK.dropJob(c);
     LK.log(T('log.postSet', { name: c.name }), 'good');
     this.endPickPost();
     this.selected = c; if ($('selInfo')) $('selInfo').dataset.cid = '';
@@ -405,16 +430,17 @@ LK.ui = {
   },
   // task / weapon selects of person cards (staff panel and stats panel)
   bindPersonCards(el) {
-    const S = LK.state;
-    this.bindPostButtons(el);
+    this.bindPostButtons(el);                                 // handlers read LK.state when clicked (a new game may have started)
     el.querySelectorAll('[data-restock]').forEach(b => b.onchange = () => { const c = LK.state.chars.find(q => q.id == b.dataset.restock); if (c) c.canRestock = b.checked; });
     el.querySelectorAll('[data-task]').forEach(s => s.onchange = () => {
-      const c = S.chars.find(q => q.id == s.dataset.task);
-      c.task = s.value; c.job = null; c.work = null; c.wage = LK.wageFor(c);
+      const c = LK.state.chars.find(q => q.id == s.dataset.task);
+      if (!c) return;
+      LK.dropJob(c); c.task = s.value; c.wage = LK.wageFor(c);
       this.renderPanel();
     });
     el.querySelectorAll('[data-weapon]').forEach(s => s.onchange = () => {
-      const c = S.chars.find(q => q.id == s.dataset.weapon);
+      const S = LK.state, c = S.chars.find(q => q.id == s.dataset.weapon);
+      if (!c) return;
       if (c.weapon) S.goods[c.weapon] = (S.goods[c.weapon] || 0) + 1;
       c.weapon = s.value || null;
       if (c.weapon) S.goods[c.weapon]--;
@@ -425,19 +451,32 @@ LK.ui = {
     const S = LK.state;
     const staff = S.chars.filter(c => c.kind === 'employee');
     const wages = staff.reduce((a, c) => a + LK.wageFor(c), 0);
+    const tab = this.staffTab;
     let h = this.infoBar('staff', esc(T('staffP.summary', { n: staff.length, wages })), T('staffP.info'), T('staffP.hint', { min: LK.WAGE.min, per: LK.WAGE.perSkill }));
-    h += staff.map(c => this.personCard(c, { act: '<button data-fire="' + c.id + '">' + esc(T('staffP.fire')) + '</button>' })).join('') || '<p class="dim">' + esc(T('staffP.noStaff')) + '</p>';
-    h += '<h3>' + esc(T('staffP.looking')) + '</h3>';
-    h += S.applicants.map((a, i) => this.personCard(a, { applicant: true, index: i, act: '<button data-hire="' + i + '">' + esc(T('staffP.hire')) + '</button>' })).join('') ||
-      '<p>' + esc(T('staffP.nobody')) + '</p>';
+    h += '<div class="tabs">' + [['mine', staff.length], ['hire', S.applicants.length]].map(([k, n]) =>
+      '<button data-stab="' + k + '"' + (tab === k ? ' class="on"' : '') + '>' + esc(T('staffP.tab.' + k, { n })) + '</button>').join('') + '</div>';
+    if (tab === 'mine') {
+      h += staff.map(c => this.personCard(c, { act: '<button data-fire="' + c.id + '">' + esc(T('staffP.fire')) + '</button>' })).join('') ||
+        '<p class="dim">' + esc(T('staffP.noStaff')) + ' <button data-stab="hire">' + esc(T('staffP.goHire')) + '</button></p>';
+    } else {
+      h += '<p class="hint">' + esc(T('staffP.looking')) + '</p>';
+      h += S.applicants.map((a, i) => this.personCard(a, { applicant: true, index: i, act: '<button data-hire="' + a.id + '">' + esc(T('staffP.hire')) + '</button>' })).join('') ||
+        '<p>' + esc(T('staffP.nobody')) + '</p>';
+    }
     el.innerHTML = h;
+    el.querySelectorAll('[data-stab]').forEach(b => b.onclick = () => { this.staffTab = b.dataset.stab; this.renderPanel(); });
     this.bindInfo(el);
     this.refreshStaffBars();
     this.drawPortraits(el, k => k[0] === 'a' ? S.applicants[+k.slice(1)] : S.chars.find(q => q.id == k));
     this.bindPersonCards(el);
-    el.querySelectorAll('[data-fire]').forEach(b => b.onclick = () => { LK.fire(S.chars.find(q => q.id == b.dataset.fire)); this.renderPanel(); });
-    el.querySelectorAll('[data-hire]').forEach(b => b.onclick = () => { LK.hire(S.applicants[+b.dataset.hire]); this.renderPanel(); });
+    el.querySelectorAll('[data-fire]').forEach(b => b.onclick = () => { LK.fire(LK.state.chars.find(q => q.id == b.dataset.fire)); this.renderPanel(); });
+    el.querySelectorAll('[data-hire]').forEach(b => b.onclick = () => {   // by id: the list changes every morning
+      const a = LK.state.applicants.find(q => q.id == b.dataset.hire);
+      if (a) LK.hire(a); else LK.log(T('log.applicantGone'), 'warn');
+      this.renderPanel();
+    });
   },
+  staffTab: 'mine',                                          // Staff window tab: 'mine' (my employees) | 'hire'
   // the owner's own window (Stats button in the bottom-left corner)
   statsPanel(el) {
     const S = LK.state, p = this.statsFor && S.chars.includes(this.statsFor) ? this.statsFor : S.player;
@@ -587,10 +626,18 @@ LK.ui = {
       money: '<b>' + Math.round(S.money) + ' M</b>', load: Math.round(b.load), cap: b.carryCap,
       free: '<b class="' + (LK.storageFree() <= 0 ? 'bad' : '') + '">' + LK.storageFree() + '</b>' }) +
       (carrying ? ' ' + esc(T('shop.carrying', { n: carrying })) : '') + '</p>';
-    for (const cat of ['stock', 'furn', 'goods']) {
+    for (const cat of ['stock', 'furn', 'goods', 'plan']) {
+      if (cat === 'plan' && !m.shop.some(it => it.cat === 'plan')) continue;
       h += '<h3>' + esc(T('shop.cat.' + cat)) + '</h3><table class="shop">';
       m.shop.forEach((it, i) => {
         if (it.cat !== cat) return;
+        if (cat === 'plan') {                                 // a plan: the item, what it needs, how long; one per visit
+          const [pc, pk] = it.key.split(':'), r = LK.craftRecipe(pc, pk), owned = LK.hasPlan(pc, pk);
+          h += '<tr' + (it.qty && !owned ? '' : ' class="dim"') + '><td>' + LK.iconHTML('i032', 18) + ' ' + esc(T('shop.plan', { name: LK.itemName(pc, pk) })) +
+            ' <small>' + esc(T('shop.planNeeds', { mats: LK.matsText(r.mats) })) + '</small></td><td>' + LK.shopPrice(it, b) + ' M</td><td>' + (owned ? esc(T('shop.planOwned')) : '×' + it.qty) + '</td>' +
+            '<td><button data-buy="' + i + '" data-n="1"' + (it.qty && !owned ? '' : ' disabled') + '>' + esc(T('shop.buy')) + '</button></td></tr>';
+          return;
+        }
         const name = cat === 'stock' ? LK.ingName(it.key) : cat === 'goods' ? LK.goodName(it.key) : LK.furnName(it.key);
         const extra = cat === 'stock' ? this.tasteName(LK.INGREDIENTS[it.key].type) :
           cat === 'goods' ? (LK.hasT('goodsDesc.' + it.key) ? T('goodsDesc.' + it.key) : LK.GOODS[it.key].desc || (LK.GOODS[it.key].weapon ? T('shop.dmg', { n: LK.GOODS[it.key].weapon }) : '')) :
@@ -605,16 +652,126 @@ LK.ui = {
     el.querySelectorAll('[data-buy]').forEach(btn => btn.onclick = () => { LK.buy(m.shop[+btn.dataset.buy], b, +btn.dataset.n); this.renderPanel(); });
   },
 
+  // ---------------- WORKBENCH (E at a workbench; craft.js) ----------------
+  bench: null, benchTab: 'craft',
+  openBench(b) { this.bench = b; if (this.panel === 'bench') this.renderPanel(); else this.toggle('bench'); },
+  itemIcon(cat, key) {
+    return cat === 'furn' ? '<canvas class="fth" width="34" height="30" data-fthumb="' + key + '"></canvas>' : LK.iconHTML((LK.GOODS[key] || {}).icon, 22);
+  },
+  benchPanel(el) {
+    const S = LK.ensureCraftState(), b = this.bench, C = LK.CRAFT, tab = this.benchTab;
+    if (!b || !S.world.objects.includes(b) || !b.built) { el.innerHTML = '<p>' + esc(T('bench.gone')) + '</p>'; return; }
+    const q = LK.benchQueue(b), all = LK.craftables(), owned = all.filter(i => LK.hasPlan(i.cat, i.key)), p = S.player;
+    const near = LK.dist(p.x, p.y, b.x + 0.5, b.y + 0.5) < 2.6;
+    const worker = S.chars.find(o => o.job && o.job.type === 'craft' && o.job.bench === b);
+    const matsHTML = mats => Object.entries(mats).map(([m, n]) => { const have = S.goods[m] || 0;
+      return '<span class="' + (have >= n ? 'good' : 'bad') + '" title="' + esc(T('bench.haveTip', { have })) + '">' + n + '× ' + esc(LK.goodName(m)) + '</span>'; }).join(', ');
+    let h = this.infoBar('bench', esc(T('bench.summary', { n: q.length, max: C.queueMax, plans: owned.length, all: all.length })), T('bench.infoTitle'),
+      T('bench.info', { max: C.queueMax, place: C.placeTime, lo: Math.round(C.recycle[0] * 100), hi: Math.round(C.recycle[1] * 100) }));
+    h += '<h3>' + esc(T('bench.queue')) + '</h3>';
+    if (!q.length) h += '<p class="dim">' + esc(T('bench.empty')) + '</p>';
+    else h += '<table class="stab bq"><tbody>' + q.map((e, i) => { const pct = Math.floor(e.done / e.time * 100);
+      return '<tr><td class="ic">' + this.itemIcon(e.cat, e.key) + '</td><td class="nm">' + esc(T(e.kind === 'craft' ? 'bench.craftEntry' : 'bench.recycleEntry', { name: LK.itemName(e.cat, e.key) })) +
+        '</td><td class="am"><i class="pbar"><b data-bqp="' + i + '" style="width:' + pct + '%"></b></i> <span data-bqt="' + i + '">' + pct + ' %</span></td>' +
+        '<td class="rm"><button data-unq="' + i + '" title="' + esc(T('bench.remove')) + '">✕</button></td></tr>'; }).join('') + '</tbody></table>';
+    h += '<div class="row">' + esc(worker ? T('bench.workedBy', { name: worker.name }) : q.length ? T('bench.nobody') : '') +
+      (q.length && near && worker !== p ? ' <button id="benchDo">' + esc(T('bench.doIt')) + '</button>' : '') + '</div>';
+    h += '<div class="tabs">' + ['craft', 'recycle'].map(k => '<button data-btab="' + k + '"' + (tab === k ? ' class="on"' : '') + '>' + esc(T('bench.tab.' + k, { n: owned.length })) + '</button>').join('') + '</div>';
+    const full = q.length >= C.queueMax;
+    if (tab === 'craft') {
+      if (!owned.length) h += '<p class="dim">' + esc(T('bench.noPlans')) + '</p>';
+      else h += '<table class="stab"><thead><tr><th></th><th>' + esc(T('bench.col.item')) + '</th><th>' + esc(T('bench.col.mats')) + '</th><th class="am">' + esc(T('bench.col.time')) + '</th><th></th></tr></thead><tbody>' +
+        owned.map(i => { const r = LK.craftRecipe(i.cat, i.key), ok = LK.hasMats(r.mats) && !full;
+          return '<tr><td class="ic">' + this.itemIcon(i.cat, i.key) + '</td><td class="nm">' + esc(LK.itemName(i.cat, i.key)) + '</td><td>' + matsHTML(r.mats) + '</td><td class="am">' + r.time + ' s</td>' +
+            '<td><button data-craft="' + i.cat + ':' + i.key + '"' + (ok ? '' : ' disabled') + '>' + esc(T('bench.craft')) + '</button></td></tr>'; }).join('') + '</tbody></table>';
+      if (owned.length < all.length) h += '<p class="hint">' + esc(T('bench.morePlans', { n: all.length - owned.length })) + '</p>';
+    } else {
+      const list = all.filter(i => ((i.cat === 'furn' ? S.furn : S.goods)[i.key] || 0) > 0);
+      if (!list.length) h += '<p class="dim">' + esc(T('bench.nothingToRecycle')) + '</p>';
+      else h += '<table class="stab"><thead><tr><th></th><th>' + esc(T('bench.col.item')) + '</th><th>' + esc(T('bench.col.back', { lo: Math.round(C.recycle[0] * 100), hi: Math.round(C.recycle[1] * 100) })) + '</th><th class="am">' + esc(T('bench.col.time')) + '</th><th></th></tr></thead><tbody>' +
+        list.map(i => { const r = LK.craftRecipe(i.cat, i.key), n = (i.cat === 'furn' ? S.furn : S.goods)[i.key], cr = i.cat === 'furn' ? LK.craftedCount(i.key) : 0;
+          return '<tr><td class="ic">' + this.itemIcon(i.cat, i.key) + '</td><td class="nm">' + esc(LK.itemName(i.cat, i.key)) + ' ×' + n + (cr ? ' <small>🔨' + cr + '</small>' : '') + '</td><td>' + esc(LK.matsText(r.mats)) + '</td><td class="am">' + r.time + ' s</td>' +
+            '<td><button data-recycle="' + i.cat + ':' + i.key + '"' + (full ? ' disabled' : '') + '>' + esc(T('bench.recycle')) + '</button></td></tr>'; }).join('') + '</tbody></table>';
+    }
+    el.innerHTML = h;
+    this.bindInfo(el);
+    el.querySelectorAll('canvas[data-fthumb]').forEach(cv => LK.furnThumb(cv, cv.dataset.fthumb));
+    el.querySelectorAll('[data-btab]').forEach(x => x.onclick = () => { this.benchTab = x.dataset.btab; this.renderPanel(); });
+    el.querySelectorAll('[data-unq]').forEach(x => x.onclick = () => { LK.unqueue(b, +x.dataset.unq); this.renderPanel(); });
+    el.querySelectorAll('[data-craft]').forEach(x => x.onclick = () => {
+      const [c, k] = x.dataset.craft.split(':'), r = LK.queueCraft(b, c, k);
+      if (!r.ok) LK.log(T(r.why === 'full' ? 'log.queueFull' : 'log.noMats', { max: C.queueMax, name: LK.itemName(c, k) }), 'warn');
+      this.renderPanel();
+    });
+    el.querySelectorAll('[data-recycle]').forEach(x => x.onclick = () => {
+      const [c, k] = x.dataset.recycle.split(':'), r = LK.queueRecycle(b, c, k);
+      if (!r.ok && r.why === 'full') LK.log(T('log.queueFull', { max: C.queueMax }), 'warn');
+      this.renderPanel();
+    });
+    const doIt = el.querySelector('#benchDo');
+    if (doIt) doIt.onclick = () => { if (LK.ownerCraft(p, b)) this.close(); };
+    this.benchSig = q.map(e => e.kind + e.key).join(',');
+  },
+  // every frame while the window is open: the progress bars (a changed queue = redraw)
+  refreshBench() {
+    const b = this.bench, q = b && b.queue || [];
+    if (q.map(e => e.kind + e.key).join(',') !== this.benchSig) return this.renderPanel();
+    q.forEach((e, i) => {
+      const pct = Math.floor(e.done / e.time * 100), bar = document.querySelector('[data-bqp="' + i + '"]'), txt = document.querySelector('[data-bqt="' + i + '"]');
+      if (bar && bar.style) bar.style.width = pct + '%';
+      if (txt && txt.textContent !== pct + ' %') txt.textContent = pct + ' %';
+    });
+  },
+
+  // ---------------- DEV: add any item to the storage (F2 → Add item, key Z) ----------------
+  devItemsPanel(el) {
+    const S = LK.state, I = LK.INGREDIENTS, G = LK.GOODS, F = LK.FURNITURE;
+    const cats = [
+      ['drink', 'stock', Object.keys(I).filter(k => I[k].kind === 'drink')],
+      ['food', 'stock', Object.keys(I).filter(k => I[k].kind !== 'drink')],
+      ['mats', 'goods', Object.keys(G).filter(k => G[k].craftMat || k === 'materials')],
+      ['goods', 'goods', Object.keys(G).filter(k => !G[k].craftMat && k !== 'materials')],
+      ['furn', 'furn', Object.keys(F).filter(k => !F[k].nosell)],
+      ['deco', 'furn', Object.keys(F).filter(k => F[k].nosell)]
+    ];
+    const have = (cat, k) => LK.fmt((cat === 'stock' ? S.stock : cat === 'goods' ? S.goods : S.furn)[k] || 0);
+    const name = (cat, k) => cat === 'stock' ? LK.ingName(k) : cat === 'goods' ? LK.goodName(k) : LK.furnName(k);
+    const icon = (cat, k) => cat === 'furn' ? '<canvas class="fth" width="34" height="30" data-fthumb="' + k + '"></canvas>' : LK.iconHTML((cat === 'stock' ? I : G)[k].icon, 22);
+    let h = '<p class="hint">' + esc(T('devI.hint', { used: LK.storageUsed(), cap: LK.storageCapacity() })) + '</p>' +
+      '<input id="devISearch" placeholder="' + esc(T('devI.search')) + '" style="width:100%;margin-bottom:6px">';
+    for (const [id, cat, keys] of cats) {
+      if (!keys.length) continue;
+      h += '<div class="devCat" data-devcat="' + id + '"><h3>' + esc(T('devI.cat.' + id)) + ' <small>(' + keys.length + ')</small></h3><table class="stab"><tbody>' +
+        keys.map(k => '<tr data-devrow="' + esc((name(cat, k) + ' ' + k).toLowerCase()) + '"><td class="ic">' + icon(cat, k) + '</td><td class="nm">' + esc(name(cat, k)) + ' <small>' + esc(k) + '</small></td>' +
+          '<td class="am" title="' + esc(T('devI.inStorage')) + '"><b data-devhave="' + cat + ':' + k + '">' + have(cat, k) + '</b></td><td>' +
+          [1, 5, 10].map(n => '<button data-devadd="' + cat + ':' + k + ':' + n + '">+' + n + '</button>').join(' ') + '</td></tr>').join('') + '</tbody></table></div>';
+    }
+    el.innerHTML = h;
+    el.querySelectorAll('canvas[data-fthumb]').forEach(cv => LK.furnThumb(cv, cv.dataset.fthumb));
+    el.querySelectorAll('[data-devadd]').forEach(b => b.onclick = () => {   // update the count in place (no redraw: keeps the scroll)
+      const [cat, k, n] = b.dataset.devadd.split(':');
+      LK.dev.addItem(cat, k, +n);
+      const c = el.querySelector('[data-devhave="' + cat + ':' + k + '"]'); if (c) c.textContent = have(cat, k);
+      const hint = el.querySelector('.hint'); if (hint) hint.textContent = T('devI.hint', { used: LK.storageUsed(), cap: LK.storageCapacity() });
+    });
+    const search = el.querySelector('#devISearch');
+    search.oninput = () => {                                   // filter rows in place (typing keeps the focus)
+      const q = search.value.trim().toLowerCase();
+      el.querySelectorAll('[data-devrow]').forEach(r => { r.style.display = !q || r.dataset.devrow.includes(q) ? '' : 'none'; });
+      el.querySelectorAll('[data-devcat]').forEach(c => { c.style.display = [...c.querySelectorAll('[data-devrow]')].some(r => r.style.display !== 'none') ? '' : 'none'; });
+    };
+  },
+
   // ---------------- GAME MENU (save, load, options, main menu) ----------------
   gameView: 'main',
   gamePanel(el) {
     if (this.gameView === 'options') return this.optionsPanel(el);
     el.innerHTML = '<div class="gmenu">' +
-      '<button id="gmSave">💾 ' + esc(T('hud.save')) + '</button>' +
+      '<button id="gmSave"' + (LK.state.over ? ' disabled' : '') + '>💾 ' + esc(T('hud.save')) + '</button>' +   // a lost game can't be saved
       '<button id="gmLoad">📂 ' + esc(T('hud.load')) + '</button>' +
       '<button id="gmOptions">⚙ ' + esc(T('gm.options')) + '</button>' +
       '<button id="gmMain">🏠 ' + esc(T('hud.mainMenu')) + '</button>' +
-      '<button id="gmBack">↩ ' + esc(T('gm.resume')) + '</button></div>';
+      '<button id="gmBack">↩ ' + esc(T('gm.resume')) + '</button></div><div class="ver">v' + esc(LK.VERSION) + '</div>';
     el.querySelector('#gmSave').onclick = () => this.openSaves('save');
     el.querySelector('#gmLoad').onclick = () => this.openSaves('load');
     el.querySelector('#gmOptions').onclick = () => { this.gameView = 'options'; this.renderPanel(); };
@@ -688,7 +845,7 @@ LK.ui = {
   helpPanel(el) { el.innerHTML = this.helpHTML(); },
   // shared by the in-game help panel (F1) and the main menu
   helpHTML() { return T('help.html', { every: LK.RENT.everyDays, perTile: LK.RENT.perTile, perTent: LK.RENT.perTent }); },
-  aboutHTML() { return T('about.html'); },
+  aboutHTML() { return T('about.html') + '<p class="ver">' + esc(T('about.version', { v: LK.VERSION })) + '</p>'; },
 
   // ---------------- MAP EXPORT / IMPORT ----------------
   mapPanel(el) {
@@ -709,10 +866,12 @@ LK.ui = {
   // ---------------- item menu (E on an outside item with more than one action) ----------------
   itemMenu: null,
   openItemMenu(p, o, acts) {
+    if (this.panel) this.close();                            // one window at a time
+    if (this.buildMode) this.toggleBuild();
     const el = $('itemMenu'), m = LK.touchMode ? LK.toScreen(p.x, p.y) : LK.input.mouse || [LK.view.w / 2, LK.view.h / 2];
     this.itemMenu = { p, o };
     el.innerHTML = '<b>' + esc(LK.furnName(o.type)) + '</b>' +
-      acts.map((a, i) => '<button data-act="' + a + '"><kbd>' + (i + 1) + '</kbd> ' + esc(T('item.' + a)) + '</button>').join('');
+      acts.map((a, i) => '<button data-act="' + a + '"><kbd>' + (i + 1) + '</kbd> ' + esc(LK.actionLabel ? LK.actionLabel(o, a) : T('item.' + a)) + '</button>').join('');
     el.style.left = Math.min(m[0] + 12, LK.view.w - 220) + 'px';
     el.style.top = Math.min(m[1] + 12, LK.view.h - 40 - 34 * acts.length) + 'px';
     el.classList.remove('hidden');
@@ -734,6 +893,9 @@ LK.ui = {
   // ---------------- BUILD MODE ----------------
   toggleBuild() {
     this.buildMode = !this.buildMode;
+    if (this.buildMode && this.panel) this.close();          // one window at a time: build mode closes the open window
+    if (this.buildMode && this.pickPost) this.endPickPost();
+    if (this.buildMode && this.itemMenu) this.closeItemMenu();
     $('buildBar').classList.toggle('hidden', !this.buildMode);
     $('btnBuild').classList.toggle('on', this.buildMode);
     if (this.buildMode) this.renderBuildBar();
@@ -749,13 +911,15 @@ LK.ui = {
   },
   renderBuildBar() {
     const S = LK.state, b = this.build, el = $('buildBar');
-    const furn = Object.entries(S.furn).filter(([, n]) => n > 0);
+    const furn = Object.entries(LK.buildableFurn());           // storage + what the owner carries
     let h = '<div class="tools">' +
       ['furn', 'pick', 'room', 'erase', 'door'].map(k =>
         '<button data-tool="' + k + '"' + (b.tool === k ? ' class="on"' : '') + '>' + esc(T('build.' + k)) + '</button>').join('') +
       ' <button id="rot">' + esc(T('build.rotate')) + '</button> <button id="claimE">' + esc(T('build.claimE', { cost: LK.CLAIM_COST })) + '</button> <button id="claimS">' + esc(T('build.claimS', { cost: LK.CLAIM_COST })) + '</button> <button id="mapFile">' + esc(T('build.mapFile')) + '</button></div>';
-    if (b.tool === 'furn') h += '<div class="opts">' + (furn.length ? furn.map(([k, n]) => '<button data-furn="' + k + '"' + (b.furn === k ? ' class="on"' : '') + '>' + esc(LK.furnName(k)) + ' ×' + n + '</button>').join('') : '<i>' + esc(T('build.noFurn')) + '</i>') + '</div>';
-    if (b.tool === 'room') h += '<div class="opts">' + ['B', 'K', 'S'].map(k => '<button data-room="' + k + '"' + (b.room === k ? ' class="on"' : '') + '>' + esc(LK.tn('room', k, LK.ROOMS[k].name)) + '</button>').join('') + ' <small>' + esc(T('build.roomHint', { n: S.goods.materials || 0 })) + '</small></div>';
+    if (b.tool === 'furn') h += '<div class="opts">' + (furn.length ? furn.map(([k, [n, hand]]) => '<button data-furn="' + k + '"' + (b.furn === k ? ' class="on"' : '') +
+      (hand ? ' title="' + esc(T('build.inHandsTip', { n: hand })) + '"' : '') + '>' + esc(LK.furnName(k)) + ' ×' + n + (hand ? ' <span class="hand">✋' + hand + '</span>' : '') +
+      (LK.craftedCount && LK.craftedCount(k) ? ' <span class="hand" title="' + esc(T('build.craftedTip', { n: LK.craftedCount(k), s: LK.CRAFT.placeTime })) + '">🔨' + LK.craftedCount(k) + '</span>' : '') + '</button>').join('') : '<i>' + esc(T('build.noFurn')) + '</i>') + '</div>';
+    if (b.tool === 'room') h += '<div class="opts">' + ['B', 'K', 'S'].map(k => '<button data-room="' + k + '"' + (b.room === k ? ' class="on"' : '') + '>' + esc(LK.tn('room', k, LK.ROOMS[k].name)) + '</button>').join('') + ' <small>' + esc(T('build.roomHint', { n: LK.materialsAvail() })) + '</small></div>';
     if (b.tool === 'door') h += '<div class="opts"><small>' + esc(T('build.doorHint')) + '</small></div>';
     if (b.tool === 'pick') h += '<div class="opts"><small>' + esc(T('build.pickHint')) + '</small></div>';
     el.innerHTML = h;
@@ -785,15 +949,18 @@ LK.ui = {
     const S = LK.state, w = S.world, b = this.build;
     if (!w.inb(x, y)) return;
     if (b.tool === 'furn' && !drag) {
-      if (!b.furn || !(S.furn[b.furn] > 0)) return LK.log(T('log.selectFurn'), 'warn');
+      if (!b.furn || !(LK.furnAvail(b.furn) > 0)) return LK.log(T('log.selectFurn'), 'warn');
       if (w.objAt(x, y)) return LK.log(T('log.occupied'), 'warn');
       const err = LK.placeError(b.furn, x, y);
       if (err) return LK.log(T(err, { name: LK.furnName(b.furn) }), 'warn');
       if (S.chars.some(c => c.tx === x && c.ty === y && c.kind !== 'gone') && LK.FURNITURE[b.furn].block) return LK.log(T('log.standing'), 'warn');
-      w.addObject(b.furn, x, y, b.rot, false);
-      S.furn[b.furn]--;
+      // crafted pieces first (set up in a few seconds), then what he carries, then the storage
+      const crafted = LK.craftedCount && LK.craftedCount(b.furn) > 0;
+      if (crafted) { S.furn[b.furn]--; S.furnCrafted[b.furn]--; } else LK.useForBuild('furn', b.furn, 1);
+      const placed = w.addObject(b.furn, x, y, b.rot, false);
+      if (crafted && placed) placed.crafted = true;
       LK.log(T('log.blueprint', { name: LK.furnName(b.furn) }));
-      if (!S.furn[b.furn]) b.furn = null;
+      if (!LK.furnAvail(b.furn)) b.furn = null;
       this.renderBuildBar();
     } else if (b.tool === 'pick' && !drag) {
       const o = w.objAt(x, y);
@@ -807,10 +974,13 @@ LK.ui = {
       if (cur === code || cur === 'X') return;
       if (code === '.' && cur === 'S' && w.roomTiles('S').length <= 1) return LK.log(T('log.needStorage'), 'bad');
       if (code !== '.') {
-        if (cur === '.' && (S.goods.materials || 0) < 1) return LK.log(T('log.noMaterials'), 'bad');
-        if (cur === '.') S.goods.materials--;
+        if (cur === '.' && !LK.useForBuild('goods', 'materials', 1)) return LK.log(T('log.noMaterials'), 'bad');
       }
       w.setRoom(x, y, code);
+      if (code === '.') {                                     // erased: doors / windows / extra walls left between two outside tiles go too
+        for (const [side, nx, ny] of [['N', x, y - 1], ['S', x, y + 1], ['W', x - 1, y], ['E', x + 1, y]])
+          if (w.room(nx, ny) === '.') delete w.edgeOverride[w.edgeKey(x, y, side)];
+      }
       w.rebuildWalls(); w.markDirty();
       this.renderBuildBar();
     } else if (b.tool === 'door' && !drag) {
@@ -822,11 +992,14 @@ LK.ui = {
       const e = w.edges[key];
       const order = ['wall', 'door', 'window'];
       if (!e) {
-        if ((S.goods.materials || 0) < 2) return LK.log(T('log.wallMaterials'), 'bad');
-        S.goods.materials -= 2; w.edgeOverride[key] = 'wall';
+        if (!LK.useForBuild('goods', 'materials', 2)) return LK.log(T('log.wallMaterials'), 'bad');
+        w.edgeOverride[key] = 'wall';
       } else {
         const next = order[(order.indexOf(e.kind) + 1) % order.length] || 'wall';   // editor pieces (arches...) become a plain wall
-        w.edgeOverride[key] = next;
+        const [, , s2] = key.split(','), ax = +key.split(',')[0], ay = +key.split(',')[1];
+        const outside = w.room(ax, ay) === '.' && w.room(s2 === 'W' ? ax - 1 : ax, s2 === 'N' ? ay - 1 : ay) === '.';
+        if (outside && e.kind === 'window') delete w.edgeOverride[key];   // a free-standing piece outside: wall → door → window → gone
+        else w.edgeOverride[key] = next;
       }
       w.rebuildWalls(); w.markDirty();
       this.renderBuildBar();

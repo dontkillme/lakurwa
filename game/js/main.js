@@ -3,6 +3,7 @@
 
 LK.mapId = 'default';
 LK.newGame = function (mapDef) {
+  if (LK.intro && LK.introAbort) LK.introAbort();          // a running introduction never outlives its game
   const def = JSON.parse(JSON.stringify(mapDef || LK.MAPS[LK.mapId] || LK.MAPS['default'] || LK.MAPS[Object.keys(LK.MAPS)[0]]));
   const world = new LK.World(def);
   const S = LK.state = {
@@ -16,7 +17,7 @@ LK.newGame = function (mapDef) {
     today: { income: 0, expense: 0, served: 0, clients: 0, fights: 0 },
     merchant: null, nextMerchant: 10 * 60, ring: null, applicants: [], over: false,
     order: { warnings: 0, paidStreak: 0, nextDay: LK.RENT.everyDays, squad: null },
-    arrests: [], alarmT: 0
+    arrests: [], alarmT: 0, plans: {}, furnCrafted: {}
   };
   const ps = def.playerStart || { x: 1, y: def.route[0] };
   const p = new LK.Char('player', { name: LK.t('name.owner'), sheet: 'maleAdventurer', hue: 0, x: ps.x, y: ps.y, str: 6, sta: 6, int: 6,
@@ -26,7 +27,8 @@ LK.newGame = function (mapDef) {
   LK.refreshApplicants();
   LK.centerOn(p.x, p.y);
   LK.fx.length = 0;
-  if (LK.ui) { LK.ui.selected = null; LK.ui.setSpeed(1); }
+  if (LK.whacks) LK.whacks.length = 0;                      // a bat scene of the old game must not play on in this one
+  if (LK.ui) { LK.ui.resetModes(); LK.ui.setSpeed(1); }
   const ov = document.getElementById('over'); if (ov) ov.classList.add('hidden');
   return S;
 };
@@ -59,7 +61,7 @@ LK.interact = function (p) {
   const S = LK.state, w = S.world;
   if (!p.active) return;
   if (p.dragging) { LK.dropDrag(p); p.say(LK.t('say.drop')); return; }
-  if (p.job) { p.job = null; p.work = null; }
+  if (p.job) LK.dropJob(p);
   // the crazy prophet (a hint) or the merchant (the shop): whoever is closer
   const pr = S.chars.find(c => c.kind === 'prophet' && c.active && LK.dist(c.x, c.y, p.x, p.y) < 2.2);
   const mer = S.merchant && S.merchant.state === 'wait' && LK.dist(p.x, p.y, S.merchant.x, S.merchant.y) < 2.5 ? S.merchant : null;
@@ -79,7 +81,7 @@ LK.interact = function (p) {
   const ko = S.chars.find(c => c !== p && c.ko > 0 && !c.dragBy && LK.dist(c.x, c.y, p.x, p.y) < 1.6);
   if (ko) { LK.startDrag(p, ko); p.say(LK.t('say.dragKo', { name: ko.name.split(' ')[0] })); return; }
   // a guest next to us is waiting to order: take it right here
-  const guest = S.orders.filter(o => o.state === 'placed' && !o.worker && o.client.active && LK.dist(o.client.x, o.client.y, p.x, p.y) < 1.8)
+  const guest = S.orders.filter(o => o.state === 'placed' && !o.worker && o.client.active && LK.dist(o.client.x, o.client.y, p.x, p.y) < 1.8 && LK.canReach(p, o.client))   // not through a wall
     .sort((a, b) => LK.dist(a.client.x, a.client.y, p.x, p.y) - LK.dist(b.client.x, b.client.y, p.x, p.y))[0];
   if (guest) { guest.worker = p; p.job = LK.newJob('serve', { order: guest, phase: 'takeHere' }); return; }
   // outside the bar: the item under the mouse next to us - take it, or a menu when it has more actions
@@ -88,10 +90,16 @@ LK.interact = function (p) {
     const acts = LK.itemActions(item);
     if (acts.length === 1) { LK.doItemAction(p, item, acts[0]); return; }
     if (acts.length > 1) { LK.ui.openItemMenu(p, item, acts); return; }
+    if (LK.idleObjSay(p, item)) return;                       // a well with nothing in it: say so (never pick it up)
   }
   // the rat altar: put a bottle of orzechówka on it
   if (LK.stockAltar(p)) return;
-  const near = tag => w.objsWithTag(tag, true).filter(o => LK.isBeside(p, o) || Math.max(Math.abs(o.x - p.tx), Math.abs(o.y - p.ty)) <= 1)[0];
+  // a special action on something right next to us (gather water…) - without pointing at it
+  const special = LK.objActions && w.objects.find(o => LK.objActions(o, p).length && (LK.isBeside(p, o) || (o.x === p.tx && o.y === p.ty) || LK.openNeighbour(p.tx, p.ty, o.x, o.y)));
+  if (special) { LK.startObjAction(p, special, LK.objActions(special, p)[0]); return; }
+  const idle = w.objects.find(o => (LK.FURNITURE[o.type] || {}).actions && (LK.isBeside(p, o) || LK.openNeighbour(p.tx, p.ty, o.x, o.y)));
+  if (idle && LK.idleObjSay(p, idle)) return;
+  const near = tag => w.objsWithTag(tag, true).filter(o => LK.isBeside(p, o) || (o.x === p.tx && o.y === p.ty) || LK.openNeighbour(p.tx, p.ty, o.x, o.y))[0];   // never through a wall
   const counter = near('counter');
   if (counter) {
     // 1. mix a drink that was already taken (own tray first, oldest first)
@@ -106,6 +114,9 @@ LK.interact = function (p) {
     const o = S.orders.find(o => o.state === 'kitchen' && !o.worker);
     if (o) { o.worker = p; o.state = 'cooking-wait'; p.job = LK.newJob('cook', { order: o, stove }); return; }
   }
+  // the workbench: its window (queue, plans, recycling)
+  const bench = near('workbench');
+  if (bench && LK.ui.openBench) { LK.ui.openBench(bench); return; }
   // build / repair / clean something next to us
   for (const o of w.objects) {
     if (Math.max(Math.abs(o.x - p.tx), Math.abs(o.y - p.ty)) > 1) continue;
@@ -151,16 +162,17 @@ LK.pointedItem = function (p) {
 };
 // what the owner can do with an outside item, in menu order: 'stock' | 'build' | 'repair' | 'clean' | 'take'
 LK.itemActions = function (o) {
-  const d = LK.FURNITURE[o.type] || {}, acts = [];
+  const d = LK.FURNITURE[o.type] || {}, acts = LK.objActions ? LK.objActions(o, LK.state.player) : [];   // special actions first (gather…, produce.js)
   if ((d.tags || []).includes('ratAltar') && o.built && !o.stocked) acts.push('stock');
   if (!o.built) acts.push('build');
   else if (o.hp < 100) acts.push('repair');
   else if (o.dirty) acts.push('clean');
-  if (!d.nosell) acts.push('take');
+  if (!d.nosell && !(d.actions || []).length) acts.push('take');   // furniture with special actions (well…) is picked up like any furniture: build mode → Pick up
   return acts;
 };
 LK.doItemAction = function (p, o, act) {
   if (!LK.state.world.objects.includes(o)) return;
+  if (LK.OBJ_ACTIONS && LK.OBJ_ACTIONS[act]) { LK.startObjAction(p, o, act); return; }
   if (act === 'stock') { LK.stockAltar(p, o); return; }
   if (act === 'take') {
     const err = LK.takeError(o);
@@ -182,13 +194,11 @@ LK.takeError = function (o) {
 // take object o back into the storage (furniture count); jobs aimed at it are dropped
 LK.takeItem = function (o) {
   const S = LK.state;
+  if (o.queue && LK.benchRefundAll) LK.benchRefundAll(o);   // a workbench: its queue goes back into the storage
   S.world.removeObject(o);
   S.furn[o.type] = (S.furn[o.type] || 0) + 1;
-  for (const c of S.chars) if (c.job && (c.job.target === o || c.job.stove === o || c.job.counter === o)) {
-    if (c.job.order && c.job.order.worker === c && c.job.order.state !== 'carry') c.job.order.worker = null;
-    if (c.job.order && c.job.order.state === 'cooking-wait') c.job.order.state = 'kitchen';
-    c.job = null; c.work = null;
-  }
+  if (o.crafted && LK.ensureCraftState) { LK.ensureCraftState(S).furnCrafted[o.type] = (S.furnCrafted[o.type] || 0) + 1; }   // still a crafted piece (quick set-up)
+  for (const c of S.chars) if (c.job && (c.job.target === o || c.job.stove === o || c.job.counter === o)) LK.dropJob(c);
   if (LK.ui && LK.ui.itemMenu && LK.ui.itemMenu.o === o) LK.ui.closeItemMenu();
   if (LK.ui && LK.ui.buildMode) LK.ui.renderBuildBar();
 };
@@ -238,6 +248,7 @@ LK.input = {
       this.keys[k] = true;
       if (e.key === 'Shift') this.keys.shift = true;
       const S = LK.state;
+      if (S.over && k !== 'escape' && e.key !== 'F1') return;   // game over: only the game menu (load) and help
       if (LK.ui.itemMenu && /^[1-9]$/.test(k) && LK.ui.itemMenuActs[+k - 1]) { LK.ui.pickItemAction(LK.ui.itemMenuActs[+k - 1]); return; }   // item menu: number keys
       if (k === 'e') LK.interact(S.player);
       else if (k === 'f') LK.playerAttack(S.player);
@@ -261,6 +272,7 @@ LK.input = {
       else if ((k === '+' || k === '=') && LK.devMode) LK.dev.money(1000);
       else if (k === 'p' && LK.devMode) LK.dev.piss(e.shiftKey);   // Shift+P: on a rental tent
       else if (k === 'x' && LK.devMode) LK.dev.callProphet();
+      else if (k === 'z' && LK.devMode) LK.ui.toggle('devitems');   // the dev window: add any item to the storage
       else if (e.key === 'F1') { LK.ui.toggle('help'); e.preventDefault(); }
       else if (k === 'escape') {
         // Esc closes what is open; with nothing open it opens the game menu
@@ -303,7 +315,7 @@ LK.input = {
   rightClick(x, y) {
     const S = LK.state, p = S.player, w = S.world;
     if (!p.active || !w.inb(x, y)) return;
-    p.job = null; p.work = null;
+    LK.dropJob(p);
     if (w.walkable(x, y) ? p.goTo(x, y) : p.goAdjacent(x, y)) LK.follow = true;
     else p.say(LK.t('say.cantGetThere'), 1);
   },
@@ -337,6 +349,8 @@ LK.showSplash = function (inGame) {
   LK.splashOpen = true;
   LK.splashWasSpeed = inGame ? LK.state.speed : 1;
   LK.ui.setSpeed(0); LK.ui.close();
+  if (LK.ui.pickPost) LK.ui.endPickPost();                  // its banner would show over the main menu
+  if (LK.ui.itemMenu) LK.ui.closeItemMenu();
   const $id = id => document.getElementById(id);
   $id('start').classList.remove('hidden');
   document.body.classList.add('menu-open');
@@ -406,12 +420,12 @@ LK.step = function (dt) {
   const joy = LK.input.joy;                // touch joystick when no key is held
   if (!vx && !vy && joy && !LK.intro) [vx, vy] = LK.input.dirFromScreen(joy[0], joy[1]);
   p.vx = vx; p.vy = vy; p.running = !!k.shift || LK.input.runToggle;
-  if (vx || vy) { p.path = []; if (p.job && p.job.type !== 'deliver') { p.job = null; } p.work = null; LK.follow = true; }
+  if (vx || vy) { p.path = []; if (p.job && p.job.type !== 'deliver') LK.dropJob(p); p.work = null; LK.follow = true; }
   if (S.player2) {
     const q = S.player2;
     const [ux, uy] = LK.input.dirFor(k.i, k.k, k.j, k.l);
     q.vx = ux; q.vy = uy; q.running = !!k['/'];
-    if (ux || uy) { q.path = []; if (q.job && q.job.type !== 'deliver') q.job = null; q.work = null; }
+    if (ux || uy) { q.path = []; if (q.job && q.job.type !== 'deliver') LK.dropJob(q); q.work = null; }
   }
   // camera pan with arrows
   const pan = 600 * dt / Math.max(1, S.speed);
@@ -449,6 +463,7 @@ LK.step = function (dt) {
     LK.supplyUpdate();
     LK.altarWatch();
   }
+  if (LK.produceUpdate) LK.produceUpdate();                // wells, water gatherers… (produce.js)
   // visual effects (thrown cups, particles, popups) run on real time
   LK.updateEffects(dt);
   LK.checkLowStock();                      // low food / drinks toast
@@ -495,6 +510,7 @@ LK.boot = function () {
   sel.onchange = () => { LK.mapId = sel.value; LK.newGame(); LK.ui.setSpeed(0); };
   document.getElementById('startMapRow').classList.toggle('hidden', ids.length < 2);
   const cv = document.getElementById('game');
+  const ver = document.getElementById('gameVersion'); if (ver) ver.textContent = 'v' + LK.VERSION;   // main menu
   LK.Render.init(cv);
   LK.ui.init();
   LK.input.init(cv);
@@ -614,6 +630,7 @@ LK.boot = function () {
     const it = m.shop.find(s => s.cat === 'stock'); S.money = 5000; LK.buy(it, p, 3);
     const b = LK.makeApplicant(); b.task = 'bartender'; LK.hire(b); b.x = m.x - 1.5; b.y = m.y + 1; b.cargo = LK.emptyCargo(); b.cargo.goods.materials = 4; b.load = LK.cargoLoad(b.cargo);
     b.update = function (dt) { this.animT += dt; }; LK.employeeAI = () => {};
+    if (/hands/.test(location.hash)) { p.cargo.furn.lamp = 2; p.load = LK.cargoLoad(p.cargo); LK.ui.toggleBuild(); }   // +hands: build bar with furniture in his hands
     LK.cam.z = 1.4; LK.centerOn(p.x, p.y); LK.follow = false; LK.ui.setSpeed(0);
   }
   if (/lowstock/.test(location.hash)) {   // dev/screenshots: almost no food and drinks left -> the alerts
@@ -667,6 +684,29 @@ LK.boot = function () {
       LK.ui.openItemMenu(p, alt, LK.itemActions(alt));
     }
   }
+  if (/wellshot/.test(location.hash)) {   // dev/screenshots: a well (1 L) and a water gatherer (6 L) outside near the entrance, the owner next to them
+    const S = LK.state, w = S.world, ent = w.entrances()[0];
+    const free = (x, y) => w.inb(x, y) && w.room(x, y) === '.' && w.walkable(x, y) && !w.objAt(x, y) && !w.route.includes(y);
+    let spot = null;
+    for (let r = 2; r < 10 && !spot; r++) for (let dx = -r; dx <= r && !spot; dx++) { const x = ent.outside[0] + dx, y = ent.outside[1] - r; if (free(x, y) && free(x + 2, y) && free(x + 1, y + 1)) spot = [x, y]; }
+    if (!spot) for (let y = 1; y < w.H - 2 && !spot; y++) for (let x = 1; x < w.W - 3 && !spot; x++) if (free(x, y) && free(x + 2, y) && free(x + 1, y + 1)) spot = [x, y];
+    const well = w.addObject('well', spot[0], spot[1], 0, true), gw = w.addObject('watergather', spot[0] + 2, spot[1], 0, true);
+    well.prod = 1; gw.prod = 6; well.prodNext = gw.prodNext = S.time + 999;
+    S.player.x = spot[0] + 1.5; S.player.y = spot[1] + 1.5; S.player.path = [];
+    LK.cam.z = 1.3; LK.centerOn(spot[0] + 1, spot[1]); LK.follow = false; LK.ui.setSpeed(0);
+  }
+  if (/wbshot/.test(location.hash)) {   // dev/screenshots (not 'bench…': that hash runs the render benchmark): a workbench in the storage, the owner beside it, plans + materials, a queue, its window open (+recycle: that tab)
+    const S = LK.state, w = S.world;
+    const t = w.roomTiles('S').find(([x, y]) => w.walkable(x, y) && !w.objAt(x, y) && w.walkable(x - 1, y) && !w.objAt(x - 1, y));
+    const b = w.addObject('workbench', t[0], t[1], 0, true);
+    Object.assign(S.goods, { scrap: 30, wood: 40, textile: 12, plastic: 3 });
+    ['chair', 'table', 'stool', 'fridge', 'lamp'].forEach(k => LK.learnPlan('furn', k)); LK.learnPlan('goods', 'bat');
+    S.furn.counter = 1; S.furn.rug = 2;
+    LK.queueCraft(b, 'furn', 'table'); LK.queueCraft(b, 'furn', 'chair'); b.queue[0].done = b.queue[0].time * 0.4;
+    S.player.x = t[0] - 0.5; S.player.y = t[1] + 0.5; S.player.path = [];
+    if (/recycle/.test(location.hash)) LK.ui.benchTab = 'recycle';
+    LK.ui.openBench(b); LK.centerOn(t[0], t[1]); LK.follow = false; LK.ui.setSpeed(0);
+  }
   if (/postshot/.test(location.hash)) {   // dev/screenshots: a security guard with a chosen post, selected
     const S = LK.state, w = S.world, a = LK.makeApplicant(); a.task = 'security'; LK.hire(a);
     const t = w.roomTiles('B').find(([x, y]) => w.walkable(x, y) && !w.objAt(x, y) && w.entrances().every(e => Math.abs(e.inside[0] - x) + Math.abs(e.inside[1] - y) > 4));
@@ -689,6 +729,7 @@ LK.boot = function () {
     else if (a === 'piss') LK.dev.piss();
     else if (a === 'pisstent') LK.dev.piss(true);
     else if (a === 'prophet') LK.dev.callProphet();
+    else if (a === 'additem') LK.ui.toggle('devitems');
   });
   if (/noblend/.test(location.hash)) LK.TERRAIN.on = false;   // dev: compare without terrain transitions
   if (/tdebug/.test(location.hash)) LK.TERRAIN.debug = true;   // dev: show transition pieces as solid colours
@@ -699,9 +740,11 @@ LK.boot = function () {
   const st = /stab=(\w+)/.exec(location.hash);   // dev/screenshots: storage tab (stock|other|placed), sinfo = (i) open
   if (st) LK.ui.storageTab = st[1];
   if (/sinfo/.test(location.hash)) LK.ui.storageInfo = true;
+  const stt = /stafftab=(mine|hire)/.exec(location.hash); if (stt) LK.ui.staffTab = stt[1];   // dev/screenshots: staff window tab
   const mt = /mtab=(drink|dish|tent)/.exec(location.hash);   // dev/screenshots: menu window tab, minfo = (i) open
   if (mt) LK.ui.menuTab = mt[1];
   if (/minfo/.test(location.hash)) LK.ui.menuInfo = true;
+  if (/invent/.test(location.hash)) { LK.inventRecipes('drink'); LK.inventRecipes('dish'); }   // dev/screenshots: the staff invent recipes (needs demo staff)
   const inf = /info=(\w+)/.exec(location.hash);   // dev/screenshots: open the (i) of the staff / stats window
   if (inf) LK.ui.info[inf[1]] = true;
   const pm = /panel=(\w+)/.exec(location.hash);

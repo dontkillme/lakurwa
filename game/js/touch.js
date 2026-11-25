@@ -104,7 +104,8 @@ LK.touch = {
     const T = LK.TOUCH;
     const tile = (x, y) => { const [fx, fy] = LK.toTile(x, y); return [Math.floor(fx), Math.floor(fy)]; };
     const paintTool = () => LK.ui.buildMode && (LK.ui.build.tool === 'room' || LK.ui.build.tool === 'erase');
-    const two = e => { const a = e.touches[0], b = e.touches[1]; return { d: Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY) || 1, x: (a.clientX + b.clientX) / 2, y: (a.clientY + b.clientY) / 2 }; };
+    const two = e => { const a = e.targetTouches[0], b = e.targetTouches[1]; return { d: Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY) || 1, x: (a.clientX + b.clientX) / 2, y: (a.clientY + b.clientY) / 2 }; };
+    // only the fingers on the map count (e.targetTouches): a thumb on the joystick / a button is not part of a gesture
     let g = null;                            // the gesture: { mode: 'tap' | 'pan' | 'paint' | 'pinch' | 'done', x0, y0, x, y, t0, timer, d, mx, my }
     const clearLong = () => { if (g && g.timer) { clearTimeout(g.timer); g.timer = null; } };
 
@@ -112,14 +113,14 @@ LK.touch = {
       if (!LK.touchMode) return;
       e.preventDefault();
       if (LK.intro || LK.splashOpen) return;
-      if (e.touches.length >= 2) {           // second finger: pinch / two-finger pan
+      if (e.targetTouches.length >= 2) {           // second finger: pinch / two-finger pan
         clearLong();
         LK.input.drag = false;
         const p = two(e);
         g = { mode: 'pinch', d: p.d, mx: p.x, my: p.y };
         return;
       }
-      const t = e.touches[0], x = t.clientX, y = t.clientY;
+      const t = e.targetTouches[0], x = t.clientX, y = t.clientY;
       LK.input.mouse = [x, y]; LK.input.hover = tile(x, y);
       g = { mode: 'tap', x0: x, y0: y, x, y, t0: Date.now(), timer: null };
       if (paintTool()) { g.mode = 'paint'; LK.input.click(x, y, false); return; }
@@ -132,14 +133,14 @@ LK.touch = {
       if (!LK.touchMode || !g) return;
       e.preventDefault();
       if (g.mode === 'pinch') {
-        if (e.touches.length < 2) return;
+        if (e.targetTouches.length < 2) return;
         const p = two(e);
         LK.cam.x -= p.x - g.mx; LK.cam.y -= p.y - g.my; LK.follow = false;
         LK.zoomAt(p.x, p.y, p.d / g.d);
         g.d = p.d; g.mx = p.x; g.my = p.y;
         return;
       }
-      const t = e.touches[0], x = t.clientX, y = t.clientY;
+      const t = e.targetTouches[0], x = t.clientX, y = t.clientY;
       LK.input.mouse = [x, y];
       if (LK.ui.buildMode || LK.ui.pickPost) LK.input.hover = tile(x, y);   // the build ghost follows the finger
       if (g.mode === 'paint') {
@@ -153,7 +154,7 @@ LK.touch = {
     const end = e => {
       if (!LK.touchMode || !g) return;
       e.preventDefault();
-      if (e.touches.length) return;          // wait until every finger is up
+      if (e.targetTouches.length) return;          // wait until every finger is up
       clearLong();
       if (g.mode === 'tap') LK.input.click(g.x, g.y, false);     // a tap = left click
       LK.input.drag = false;

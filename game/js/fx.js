@@ -215,6 +215,17 @@ LK.dev = {
     return p;
   },
   // +1000 Mariuszki
+  // put n of an item straight into the storage (ignores the storage space). cat: 'stock' | 'goods' | 'furn'
+  addItem(cat, key, n) {
+    const S = LK.state, store = cat === 'stock' ? S.stock : cat === 'goods' ? S.goods : S.furn;
+    const def = (cat === 'stock' ? LK.INGREDIENTS : cat === 'goods' ? LK.GOODS : LK.FURNITURE)[key];
+    if (!def || !(n > 0)) return false;
+    store[key] = Math.round(((store[key] || 0) + n) * 10) / 10;
+    const name = cat === 'stock' ? LK.ingName(key) : cat === 'goods' ? LK.goodName(key) : LK.furnName(key);
+    LK.log(LK.t('log.devAdded', { n, name }), 'warn');
+    if (LK.ui && LK.ui.buildMode) LK.ui.renderBuildBar();
+    return true;
+  },
   money(n) {
     const S = LK.state; n = n || 1000;
     S.money += n;

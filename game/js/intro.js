@@ -71,6 +71,7 @@ LK.introStart = function () {
   S.chars = S.chars.filter(c => c.kind === 'player');
   S.nextMerchant = 1e12; S.prophetDay = S.day; S.nextRat = 1e12;
   LK.intro = { steps: introSteps(), i: -1, t: 0, saved: { spawner: LK.spawner } };
+  if (document.body && document.body.classList) document.body.classList.add('intro');   // HUD / windows ignore clicks (style.css)
   LK.spawner = () => {};                                       // no random guests while the bot shows the basics
   LK.ui.setSpeed(1);
   LK.follow = true;
@@ -112,15 +113,21 @@ LK.introUpdate = function (dt) {
   if (I.t >= (st.min || LK.INTRO_MIN_STEP) && (!st.done || st.done(I))) LK.introNext();
   else if (I.t > 60) LK.introNext();                           // never get stuck
 };
-LK.introStop = function (finished) {
+// end the introduction without starting anything (a new game / a loaded game replaces it)
+LK.introAbort = function () {
   const I = LK.intro;
   if (!I) return;
   const st = I.steps[I.i];
   if (st && st.end) st.end(I);
   LK.spawner = I.saved.spawner;
   LK.intro = null;
+  if (document.body && document.body.classList) document.body.classList.remove('intro');
   const el = document.getElementById('introBox');
   if (el && el.classList) el.classList.add('hidden');
+};
+LK.introStop = function (finished) {
+  if (!LK.intro) return;
+  LK.introAbort();
   LK.ui.close();
   if (LK.ui.buildMode) LK.ui.toggleBuild();
   LK.introFinished = !!finished;

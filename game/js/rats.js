@@ -105,6 +105,7 @@ LK.ratAI = function (r, dt) {
   }
   // ---- thief rat: nibbling in the storage
   if (a.state === 'nibble') {
+    if (guard) { r.work = null; r.ai = { state: 'wander', t: 0 }; return; }   // the altar got stocked meanwhile: no stealing
     if (!r.work) {
       // done: take some food and run
       const food = Object.entries(S.stock).filter(([k, n]) => n >= 1 && LK.INGREDIENTS[k] && LK.INGREDIENTS[k].kind === 'food');

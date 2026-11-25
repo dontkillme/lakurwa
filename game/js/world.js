@@ -108,7 +108,7 @@ LK.World = class {
       const key = x + ',' + y + ',' + side;
       const ov = this.edgeOverride[key];
       const piece = LK.WALL_PIECES[ov];
-      if (a === b && ov !== 'wall' && ov !== 'window' && !piece) return;
+      if (a === b && ov !== 'wall' && ov !== 'window' && ov !== 'door' && !piece) return;   // an extra wall inside one room keeps its door too
       if (a === '.' && b === '.' && !ov) return;
       if (ov === 'none') return;
       const owner = (a !== '.' && a !== 'X') ? a : (b !== '.' && b !== 'X') ? b : (a !== '.' ? a : b);
@@ -287,7 +287,11 @@ LK.World = class {
   wallBetweenDiag(x, y, tx, ty) {
     const dx = tx - x, dy = ty - y;
     if (!dx || !dy) return false;
-    return !(this.edgeOkOnly(x, y, x + dx, y) || this.edgeOkOnly(x, y, x, y + dy));
+    // open when one of the two L-shaped ways around the corner has no wall on either of its edges
+    // (checking only the edges at (x,y) let workers reach through a building corner)
+    const viaX = this.edgeOkOnly(x, y, x + dx, y) && this.edgeOkOnly(x + dx, y, tx, ty);
+    const viaY = this.edgeOkOnly(x, y, x, y + dy) && this.edgeOkOnly(x, y + dy, tx, ty);
+    return !(viaX || viaY);
   }
 
   // ---- queries ----

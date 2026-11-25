@@ -30,7 +30,7 @@ input, select, textarea { background: #2a241c; color: #f3e6cf; border: 1px solid
 #log .msg.good { color: #9e9; } #log .msg.bad { color: #f99; } #log .msg.warn { color: #fd8; }
 #log .msg:nth-child(n+8) { opacity: .5; }
 
-#buildBar { position: fixed; top: 44px; left: 50%; transform: translateX(-50%); background: #000c; padding: 6px 10px; border-radius: 6px; max-width: 94vw; }
+#buildBar { position: fixed; top: 44px; left: 50%; transform: translateX(-50%); background: #000c; padding: 6px 10px; border-radius: 6px; max-width: 94vw; overflow-y: auto; box-sizing: border-box; }   /* top / max-height follow the HUD (ui.updateTray) */
 #buildBar .tools, #buildBar .opts { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
 #buildBar .opts { margin-top: 5px; }
 
@@ -55,7 +55,7 @@ input, select, textarea { background: #2a241c; color: #f3e6cf; border: 1px solid
 .tag { font-size: calc(10px * var(--fs, 1)); text-transform: uppercase; padding: 1px 5px; border-radius: 3px; background: #555; }
 .tag.drink { background: #2d6a8a; } .tag.dish { background: #8a5a2d; }
 .card { border: 1px solid #5a4630; border-radius: 6px; padding: 6px 8px; margin: 6px 0; background: #00000033; }
-.skills { display: grid; grid-template-columns: repeat(2, 1fr); gap: 3px 18px; margin-top: 6px; }
+.skills { display: grid; grid-template-columns: repeat(auto-fill, minmax(calc(200px * var(--fs, 1)), 1fr)); gap: 3px 18px; margin-top: 6px; }   /* 2 columns, 1 on narrow screens */
 /* person cards (staff + stats): portrait column, body, action button in the top-right corner */
 .card.emp { display: grid; grid-template-columns: auto 1fr; gap: 12px; position: relative; padding: 8px 10px; }
 .card.emp .por { width: calc(118px * var(--fs, 1)); text-align: center; }
@@ -262,3 +262,35 @@ body.touch #log { bottom: calc(10px + 74px * var(--fs, 1)); width: min(calc(300p
 body.touch #selInfo { bottom: 168px; max-width: min(calc(340px * var(--fs, 1)), 60vw); }
 body.touch #hud button { min-height: 30px; min-width: 30px; }
 @media (max-width: 760px) { #hud .brand { display: none; } #hud { gap: 5px; padding: 4px 6px; } }
+/* the introduction plays by itself: the HUD and windows don't take clicks (only its Skip button) */
+body.intro #hud, body.intro #panel, body.intro #buildBar, body.intro #pStatus, body.intro #orderTray, body.intro #selInfo,
+body.intro #itemMenu, body.intro #devBadge, body.intro #touchUI, body.intro #alerts { pointer-events: none; }
+body.intro #hud > * { pointer-events: none; }
+.chip.auto { background: #2d4a5a; color: #bfe3f2; }   /* recipe made by the staff (menu window) */
+#buildBar .hand { color: #ffd24a; font-size: calc(11px * var(--fs, 1)); margin-left: 3px; }   /* furniture in the owner's hands */
+/* game over: the screen covers the game (alerts, item menu, touch controls too) but the windows Esc / F1 open
+   (game menu → load, help) come above it */
+#over { z-index: 7; }
+#panel { z-index: 8; }
+.ver { font-size: calc(11px * var(--fs, 1)); color: #9a8a70; text-align: center; margin-top: 6px; }   /* version (main menu, game menu, About) */
+/* workbench window (craft.js) */
+.pbar { display: inline-block; width: calc(90px * var(--fs, 1)); height: 7px; background: #333; border-radius: 4px; overflow: hidden; vertical-align: middle; }
+.pbar b { display: block; height: 100%; background: #e8a640; }
+#panelBody span.good { color: #9e9; }
+/* dev: add items window - the same columns in every category */
+.devCat table { width: 100%; table-layout: fixed; }
+.devCat td.ic { width: 40px; } .devCat td.am { width: 60px; } .devCat td:last-child { width: 160px; white-space: nowrap; }
+/* staff / stats person cards on phone-sized screens: portrait above the details, the action button in the flow */
+@media (max-width: 560px) {
+  .card.emp { grid-template-columns: 1fr; }
+  .card.emp .por { width: auto; display: flex; gap: 10px; align-items: center; text-align: left; }
+  .card.emp .por canvas.portrait { margin: 0; }
+  .card.emp .pstats { flex: 1; }
+  .card.emp .cbody { padding-right: 0; }
+  .card.emp .act { position: static; margin-top: 6px; }
+}
+/* the action log (bottom right) is hidden on phones / tablets and small screens - no room for it there */
+body.touch #log { display: none; }
+@media (max-width: 760px) { #log { display: none; } }
+/* narrow phones: the joystick + buttons take the whole bottom row - the owner status goes above them */
+@media (max-width: 560px) { body.touch #pStatus { bottom: calc(150px + env(safe-area-inset-bottom, 0px)); } }

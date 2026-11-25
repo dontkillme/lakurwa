@@ -232,6 +232,8 @@ LK.ORDER_SAY = { factor: 1.8, base: 2, perChar: 0.08 };   // bubble seconds for 
 LK.knockOut = function (c, by) {
   const S = LK.state;
   if (c.invulnerable) return;
+  if (c.carry) { LK.failOrder(c.carry, 'dropped'); c.carry = null; }   // what he carried is spilled
+  LK.dropJob(c);                                                    // a half-made order goes back
   c.hp = 0; c.ko = 60; c.path = []; c.work = null; c.hostile = null; c.job = null; c.vx = c.vy = 0;
   if (c.dragging) { c.dragging.dragBy = null; c.dragging = null; }
   if (c.carry) { LK.failOrder(c.carry, 'dropped'); c.carry = null; }

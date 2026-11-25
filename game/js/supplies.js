@@ -61,7 +61,7 @@ LK.sendForSupplies = function (c, money, roll) {
   S.money -= money;
   roll = roll != null ? LK.clamp(Math.round(roll), LK.SUPPLY.minutes[0], LK.SUPPLY.minutes[1]) : LK.rollSupplyTrip();
   const minutes = LK.supplyMinutes(c, roll);
-  c.job = null; c.work = null; c.hostile = null;
+  LK.dropJob(c); c.hostile = null;
   if (c.dragging) LK.dropDrag(c);
   c.trip = { money, roll, minutes, list: need.drink.concat(need.food), drinks: need.drink.length > 0, food: need.food.length > 0,
     state: 'leaving', back: S.time + minutes };
@@ -107,7 +107,8 @@ LK.supplyUpdate = function () {
   for (const c of S.chars) {
     const t = c.trip;
     if (!t) continue;
-    if (t.state === 'leaving' && !c.path.length) { t.state = 'away'; c.away = true; c.path = []; }
+    // away only once he is on his feet at the map edge (knocked out on the way: he lies there; awake again, walks on - supplyAI)
+    if (t.state === 'leaving' && !c.path.length && c.active && (c.tx === 0 || c.tx === w.W - 1)) { t.state = 'away'; c.away = true; c.path = []; }
     else if (t.state === 'away' && S.time >= t.back) {
       LK.doSupplyShopping(c);
       t.state = 'back'; c.away = false;
@@ -126,6 +127,10 @@ LK.supplyUpdate = function () {
 LK.supplyAI = function (c) {
   const t = c.trip, w = LK.state.world;
   if (!t) return false;
+  if (t.state === 'leaving' && !c.path.length && c.tx !== 0 && c.tx !== w.W - 1) {   // stopped on the way (knocked out, dragged): walk on
+    const ex = c.tx < w.W / 2 ? 0 : w.W - 1;
+    if (!c.goTo(ex, w.route[0]) && !c.goTo(w.W - 1 - ex, w.route[0])) { t.state = 'away'; c.away = true; }   // no way out: off he goes anyway
+  }
   if (t.state === 'back' && !c.path.length && w.room(c.tx, c.ty) !== 'S') {
     const st = w.roomTiles('S').filter(([x, y]) => w.walkable(x, y) && !w.objAt(x, y));
     if (!st.length || !c.goTo(st[0][0], st[0][1])) { t.state = 'back'; LK.state.money += t.change; LK.state.today.expense += t.spent; c.trip = null; }

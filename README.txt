@@ -1,4 +1,5 @@
 LA KURWA - a bar at the end of the world
+Version 1.0.0
 
 Author: Samlis Coldwind. Code: AI (and some sloppy Samlis work).
 

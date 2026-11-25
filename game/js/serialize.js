@@ -21,13 +21,15 @@ LK.ser = {
       '// anchor: auto|tile|bottom, scale (bottom-anchored), big (tile-anchored), dx/dy: pixel offsets, icon: item icon overlay,\n' +
       '// light: light radius in tiles, speed: cooking speed, vendor: merchant vendor skill needed, nosell: world decoration only,\n' +
       '// placement: furniture goes only inside the bar (B/K/S rooms); outdoor: only outside the bar instead. tag rent: a tent guests can rent (js/tents.js). tag ratAltar: js/rats.js.\n' +
+      '// produce: makes things over time, actions: special actions (gather...) - js/produce.js. craft: own crafting recipe - js/craft.js.\n' +
       LK.ser.table('LK.FURNITURE', furn);
   },
   itemsFile(ing, goods) {
     return '// La Kurwa - ingredients and other goods. Edit here or with editor.html (Items tab). Prices in Mariuszki.\n' +
-      '// kind: drink|food, type: what clients like (free text), alcohol: drunkenness per unit, vendor: vendor skill to unlock, icon: item icon key\n' +
+      '// kind: drink|food, type: what clients like (free text), alcohol: drunkenness per unit, vendor: vendor skill to unlock, icon: item icon key,\n' +
+      '// raw: made in the bar (well, water gatherer…) - the merchant doesn\'t sell it, staff don\'t invent recipes with it\n' +
       LK.ser.table('LK.INGREDIENTS', ing) + '\n' +
-      '// weapon: damage bonus, desc: shop description\n' +
+      '// weapon: damage bonus, desc: shop description, craftMat: a crafting material for the workbench (js/craft.js)\n' +
       LK.ser.table('LK.GOODS', goods);
   },
   mapFile(def, id) {

@@ -103,6 +103,7 @@ LK.decodeGame = function (d) {
   w.decals = d.decals || [];
   w.markDirty(); w.rebuildWalls();
   // 4. what people were doing right now is gone: everybody picks a new job
+  for (const c of S.chars) if (c.dragging && c.kind !== 'player') { const v = c.dragging; LK.dropDrag(c); v.rescued = false; }   // their drag job is gone: let go, someone rescues him again
   for (const c of S.chars) {
     c.job = null; c.work = null; c.path = c.path || [];
     c.frozen = false; c.pose = null; c.whack = null; c.animLock = 0;
@@ -112,7 +113,8 @@ LK.decodeGame = function (d) {
   }
   for (const o of S.orders) {                                // half-made orders go back to the counter / kitchen
     if (o.worker && o.worker.carry === o) o.worker.carry = null;
-    if (['prep', 'cooking', 'cooking-wait', 'carry'].includes(o.state)) o.state = o.kind === 'drink' ? (o.byPlayer ? 'bar' : 'placed') : 'kitchen';
+    if (['prep', 'cooking', 'carry'].includes(o.state)) LK.refundOrder(o);   // the stock was saved after they were used
+    if (['prep', 'cooking', 'cooking-wait', 'carry'].includes(o.state)) o.state = o.kind === 'drink' ? 'bar' : 'kitchen';   // taken already: just make it
     if (o.state === 'placed' || o.state === 'bar' || o.state === 'kitchen') o.worker = null;
   }
   for (const c of S.chars) if (c.carry && !S.orders.includes(c.carry)) c.carry = null;
@@ -122,7 +124,9 @@ LK.decodeGame = function (d) {
   if (LK.uidSet) LK.uidSet(Math.max(d.uid || 0, ...S.chars.map(c => c.id), ...w.objects.map(o => o.id), ...S.orders.map(o => o.id), ...S.applicants.map(c => c.id)) + 1);
   if (d.cam) { LK.cam.z = d.cam.z; LK.cam.x = d.cam.x; LK.cam.y = d.cam.y; }
   LK.fx.length = 0; if (LK.particles) LK.particles.length = 0;
-  if (LK.ui) { LK.ui.selected = null; LK.ui.pickPost = null; LK.ui.close && LK.ui.close(); LK.ui.pstHTML = null; LK.ui.trayHTML = null; }
+  if (LK.ensureCraftState) LK.ensureCraftState(S);           // saves from before crafting
+  if (LK.ui && LK.ui.setSpeed) LK.ui.setSpeed(S.speed || 0);   // the speed buttons show the loaded speed (a paused save stays paused)
+  if (LK.ui) { LK.ui.resetModes && LK.ui.resetModes(); LK.ui.close && LK.ui.close(); LK.ui.pstHTML = null; LK.ui.trayHTML = null; }
   return true;
 };
 
@@ -154,7 +158,7 @@ LK.restoreLegacy = function (d) {
 LK.saveMeta = function () {
   const S = LK.state;
   const m = Math.floor(S.time % 1440), clock = String(Math.floor(m / 60)).padStart(2, '0') + ':' + String(m % 60).padStart(2, '0');
-  return { savedAt: Date.now(), day: S.day, clock, money: Math.round(S.money), rep: Math.round(S.rep),
+  return { version: LK.VERSION, savedAt: Date.now(), day: S.day, clock, money: Math.round(S.money), rep: Math.round(S.rep),
     guests: S.chars.filter(c => c.kind === 'client' && S.world.isBar(c.tx, c.ty)).length,
     staff: S.chars.filter(c => c.kind === 'employee').length, map: S.world.def.name || LK.mapId };
 };
@@ -237,6 +241,7 @@ LK.saveTo = async function (key, quiet) {
 LK.loadFrom = async function (key) {
   const rec = await LK.saveStore.get(key);
   if (!rec || !rec.data) { LK.log(LK.t('log.noSave'), 'warn'); return false; }
+  if (LK.intro && LK.introAbort) LK.introAbort();          // the loaded game replaces the introduction
   const ok = LK.decodeGame(rec.data);
   if (ok) LK.log(LK.t('log.loadedSlot', { slot: LK.slotName(key) }), 'good');
   return ok;
