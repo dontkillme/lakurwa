@@ -279,7 +279,8 @@ LK.JOBS = {
       if (j.phase === 'go') {
         const r = go(c, j, (x, y) => cheb(x, y, t.x, t.y) <= 1 && w.walkable(x, y), t.x, t.y);
         if (r === 'fail') return 'fail';
-        if (r) { j.phase = 'wait'; c.startWork(skillTime(4, c, 'tinkering'), LK.t('work.cleaning'), () => { w.decals = w.decals.filter(d => d !== t); c.gainXp('tinkering', 0.1); j.phase = 'end'; }); }
+        if (r && LK.isDeadRat(t)) { j.phase = 'wait'; c.startWork(LK.RAT.pickTime, LK.t('work.ratPick'), () => { LK.pickDeadRat(c, t); j.phase = 'end'; }); }   // rat meat into his hands
+        else if (r) { j.phase = 'wait'; c.startWork(skillTime(4, c, 'tinkering'), LK.t('work.cleaning'), () => { w.decals = w.decals.filter(d => d !== t); c.gainXp('tinkering', 0.1); j.phase = 'end'; }); }
       }
       return j.phase === 'end' ? 'done' : undefined;
     }
@@ -357,7 +358,7 @@ LK.JOBS = {
   restock(c, j) {
     const S = LK.state, w = S.world, m = j.merchant;
     if (j.phase === 'go') {
-      if (!m || m !== S.merchant || m.state !== 'wait' || !m.active) { j.phase = 'carry'; return; }
+      if (!m || !LK.merchantList().includes(m) || m.state !== 'wait' || !m.active) { j.phase = 'carry'; return; }
       const r = go(c, j, (x, y) => cheb(x, y, m.tx, m.ty) <= 1 && w.walkable(x, y), m.tx, m.ty);
       if (r === 'fail') return 'fail';
       if (r) {
@@ -480,7 +481,7 @@ LK.findFixJob = function (c) {
     if (!o.built) consider(o, false, 20);
     else if (o.hp < 100 || o.dirty) consider(o, false, 10);
   }
-  for (const d of w.decals) if (w.isBar(d.x, d.y)) consider(d, true, 5);
+  for (const d of w.decals) if (w.isBar(d.x, d.y) || LK.isDeadRat(d)) consider(d, true, 5);   // dead rats: anywhere (meat)
   return best ? LK.newJob('fix', best) : null;
 };
 
@@ -495,7 +496,7 @@ LK.securityAI = function (c) {
   if (thief) { if (c.job) LK.dropJob(c); c.hostile = thief; c.say(LK.t('say.stopThief')); return true; }
   // a rat in the building (not the altar's guardian): chase it off
   if (!LK.altarActive()) {           // stocked altar: the rats are friends
-    const rat = S.chars.find(o => o.kind === 'rat' && !o.guardian && o.active && o.ai.state !== 'flee' && w.isBar(o.tx, o.ty) && LK.dist(o.x, o.y, c.x, c.y) < 8);
+    const rat = S.chars.find(o => o.kind === 'rat' && !o.guardian && o.active && LK.ratCatchable(o) && w.isBar(o.tx, o.ty) && LK.dist(o.x, o.y, c.x, c.y) < 8);
     if (rat) { c.hostile = rat; c.say(LK.t('say.ratChase')); return true; }
   }
   // a knocked-out thief: call the Order of the Holy Flame to take him away
@@ -584,7 +585,7 @@ LK.onHit = function (a, t) {
   const S = LK.state;
   if (t.climb && LK.thiefStopClimb) LK.thiefStopClimb(t);      // hit while climbing through a window: that's over
   if (t.kind === 'prophet') { LK.prophetHit(t); return; }      // he does not fight, he runs
-  if (t.kind === 'merchant') { t.say(LK.t('say.merchantLeaving')); S.merchantLeaveAt = S.time; return; }
+  if (t.kind === 'merchant') { t.say(LK.t('say.merchantLeaving')); t.leaveAt = S.time; return; }
   // fight back (players never act on their own)
   if (t.kind !== 'player' && t.active && !t.hostile && t.hp > 0) {
     t.hostile = a;
@@ -944,31 +945,77 @@ LK.ambience = function (c) {
 // ======================================================================
 //  MERCHANT
 // ======================================================================
+// Several merchants may wait at the same time (S.merchants); each has his own goods (m.shop), spot (m.spot)
+// and leaving time (m.leaveAt). Visits: LK.MERCHANT (data.js) - one every game day, sometimes followed by more.
+LK.MERCHANT_LOOKS = [{ sheet: 'maleAdventurer', hue: 30 }, { sheet: 'femaleAdventurer', female: true, hue: 300 }, { sheet: 'maleAdventurer', hue: 160 }];
+LK.merchantList = () => LK.state.merchants || (LK.state.merchants = []);
+// the waiting merchant closest to c (within `range` tiles), or null
+LK.nearMerchant = function (c, range) {
+  let best = null, bd = range == null ? 1e9 : range;
+  for (const m of LK.merchantList()) {
+    if (m.state !== 'wait' || !m.active) continue;
+    const d = LK.dist(c.x, c.y, m.x, m.y);
+    if (d < bd) { bd = d; best = m; }
+  }
+  return best;
+};
+// where the next merchant stands: the map's merchant spot, else the nearest free outside tile 2+ tiles from the others
+LK.merchantSpotFor = function () {
+  const w = LK.state.world, sp = w.def.merchantSpot || { x: 1, y: w.route[0] };
+  const taken = LK.merchantList().map(m => m.spot).filter(Boolean);
+  const free = (x, y) => w.inb(x, y) && w.walkable(x, y) && !w.isBar(x, y) && !w.objAt(x, y) &&
+    taken.every(([tx, ty]) => Math.max(Math.abs(tx - x), Math.abs(ty - y)) >= 2);
+  let best = null, bd = 1e9;
+  for (let dy = -6; dy <= 6; dy++) for (let dx = -6; dx <= 6; dx++) {
+    const x = sp.x + dx, y = sp.y + dy, d = Math.hypot(dx, dy * 1.5);     // rather along the road than across it
+    if (d < bd && free(x, y)) { bd = d; best = [x, y]; }
+  }
+  return best;
+};
+// a merchant walks in from the road now (null: all spots taken)
+LK.spawnMerchant = function () {
+  const S = LK.state, w = S.world, M = LK.MERCHANT, list = LK.merchantList();
+  if (list.length >= M.max) return null;
+  const spot = LK.merchantSpotFor();
+  if (!spot) return null;
+  const used = new Set(list.map(m => m.look));
+  const look = LK.MERCHANT_LOOKS.findIndex((l, i) => !used.has(i)), L = LK.MERCHANT_LOOKS[Math.max(0, look)];
+  const names = LK.tList('name.merchants');
+  const m = new LK.Char('merchant', { name: names[Math.max(0, look) % names.length], sheet: L.sheet, female: !!L.female, hue: L.hue, x: 0, y: w.route[0], str: 8, sta: 8, skills: { fighting: 40 } });
+  m.recalc(); m.hp = m.maxHp;
+  m.look = Math.max(0, look); m.spot = spot;
+  m.goTo(spot[0], spot[1]);
+  m.shop = null; m.state = 'arrive'; m.leaveAt = S.time + M.stay;
+  list.push(m); S.chars.push(m);
+  LK.log(LK.t(list.length > 1 ? 'log.merchantAnother' : 'log.merchantComing', { name: m.name }), 'good');
+  return m;
+};
+// game time of the first merchant of the next game day (days start at 06:00)
+LK.nextMerchantDay = function () {
+  const S = LK.state, M = LK.MERCHANT, k = Math.floor((S.time - 360) / 1440) + 1;
+  return k * 1440 + LK.rint(M.arrive[0] * 60, M.arrive[1] * 60);
+};
 LK.merchantAI = function (dt) {
-  const S = LK.state, w = S.world;
-  if (!S.merchant && S.time >= S.nextMerchant) {
-    const m = new LK.Char('merchant', { name: LK.t('name.merchant'), sheet: 'maleAdventurer', hue: 30, x: 0, y: w.route[0], str: 8, sta: 8, skills: { fighting: 40 } });
-    m.recalc(); m.hp = m.maxHp;
-    const sp = w.def.merchantSpot;
-    m.goTo(sp.x, sp.y);
-    m.shop = null; m.state = 'arrive';
-    S.merchant = m; S.chars.push(m);
-    S.merchantLeaveAt = S.time + 60 * 4;
-    LK.log(LK.t('log.merchantComing'), 'good');
+  const S = LK.state, w = S.world, M = LK.MERCHANT, list = LK.merchantList();
+  if (S.time >= S.nextMerchant) {
+    if (list.length >= M.max || !LK.spawnMerchant()) S.nextMerchant = S.time + 30;   // no free spot: a bit later
+    else {
+      const k = S.merchantChain = (S.merchantChain || 0) + 1;           // how many came in this visit so far
+      if (Math.random() < (M.extra[k - 1] || 0)) S.nextMerchant = S.time + LK.rint(M.extraDelay[0], M.extraDelay[1]);
+      else { S.merchantChain = 0; S.nextMerchant = LK.nextMerchantDay(); }
+    }
   }
-  const m = S.merchant;
-  if (!m) return;
-  if (m.ko > 0) return;
-  if (m.state === 'arrive' && !m.path.length) { m.state = 'wait'; m.say(LK.t('say.trade'), 4); LK.startRestock(m); }
-  if (m.state === 'wait') {
-    m.animT += 0;
-    if (Math.random() < dt * 0.05) m.say(LK.t('say.merchantAd'), 3);
-    if (S.time >= S.merchantLeaveAt) { m.state = 'leave'; m.goTo(w.W - 1, w.route[0]); m.say(LK.t('say.seeYou')); if (LK.ui) LK.ui.closeShop(); }
+  for (const m of list) {
+    if (m.ko > 0) continue;
+    if (m.state === 'arrive' && !m.path.length) { m.state = 'wait'; m.say(LK.t('say.trade'), 4); LK.startRestock(m); }
+    if (m.state === 'wait') {
+      if (!m.restockDone) LK.startRestock(m);
+      if (Math.random() < dt * 0.05) m.say(LK.t('say.merchantAd'), 3);
+      if (S.time >= m.leaveAt) { m.state = 'leave'; m.goTo(w.W - 1, w.route[0]); m.say(LK.t('say.seeYou')); if (LK.ui) LK.ui.closeShop(m); }
+    }
+    if (m.state === 'leave' && !m.path.length) m.kind = 'gone';
   }
-  if (m.state === 'leave' && !m.path.length) {
-    m.kind = 'gone'; S.merchant = null;
-    S.nextMerchant = S.time + LK.rint(60 * 14, 60 * 30);
-  }
+  if (list.some(m => m.kind === 'gone' || !S.chars.includes(m))) S.merchants = list.filter(m => m.kind !== 'gone' && S.chars.includes(m));
 };
 
 // ======================================================================

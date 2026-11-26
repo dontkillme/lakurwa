@@ -2,7 +2,7 @@
 // (localStorage when IndexedDB is not available), only after the storage notice was accepted.
 //
 // A save is the FULL game: the world (ground, rooms, walls, furniture with its state, puddles), every character
-// (guests with their orders and seats, staff, thieves mid-heist, tenants, rats, the merchant, the Order's
+// (guests with their orders and seats, staff, thieves mid-heist, tenants, rats, the merchants, the Order's
 // soldiers), orders, recipes, storage, money, the clock, the rent, tents, the rat altar ...
 // The game state is a graph (a guest points to his order, the order to the guest and the recipe, a tent to its
 // tenant ...). LK.encodeGame turns it into plain JSON: characters, furniture objects, orders and recipes are
@@ -125,6 +125,12 @@ LK.decodeGame = function (d) {
   if (d.cam) { LK.cam.z = d.cam.z; LK.cam.x = d.cam.x; LK.cam.y = d.cam.y; }
   LK.fx.length = 0; if (LK.particles) LK.particles.length = 0;
   if (LK.ensureCraftState) LK.ensureCraftState(S);           // saves from before crafting
+  if ('merchant' in state || !Array.isArray(S.merchants)) {     // saves from before several merchants (S.merchant + S.merchantLeaveAt)
+    const m = state.merchant, list = (Array.isArray(S.merchants) ? S.merchants : []).filter(x => x && S.chars.includes(x));
+    if (m && S.chars.includes(m) && !list.includes(m)) { m.leaveAt = S.merchantLeaveAt != null ? S.merchantLeaveAt : S.time; m.look = 0; list.push(m); }
+    for (const x of list) if (!x.spot) x.spot = [x.tx, x.ty];
+    S.merchants = list; delete S.merchant; delete S.merchantLeaveAt;
+  }
   if (LK.ui && LK.ui.setSpeed) LK.ui.setSpeed(S.speed || 0);   // the speed buttons show the loaded speed (a paused save stays paused)
   if (LK.ui) { LK.ui.resetModes && LK.ui.resetModes(); LK.ui.close && LK.ui.close(); LK.ui.pstHTML = null; LK.ui.trayHTML = null; }
   return true;

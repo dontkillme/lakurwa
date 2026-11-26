@@ -25,7 +25,11 @@ LK.START_RECIPES = [
 // standing inside a storage room adds its capacity. 1 item = 1 bottle / kg / piece / building material / furniture item.
 LK.STORAGE_BASE = 80;
 // What the travelling merchant carries per visit (random picks): [min, max] kinds
-LK.MERCHANT = { ingredients: [3, 6], furniture: [1, 3], qty: [3, 14], materialsChance: 0.7, specialChance: 0.35 };
+// Visits: one merchant comes every game day between the `arrive` hours; after him another one follows `extraDelay`
+// game minutes later with the chance extra[0] (a third with extra[1] ...), so several may wait at the same time
+// (each with his own goods and spot, at most `max`). Each waits `stay` game minutes.
+LK.MERCHANT = { ingredients: [3, 6], furniture: [1, 3], qty: [3, 14], materialsChance: 0.7, specialChance: 0.35,
+  arrive: [8, 14], stay: 240, extra: [0.4, 0.2], extraDelay: [0, 120], max: 3, firstAt: 10 * 60 };
 // Order of the Holy Flame (Zakon Świętego Płomienia): rent collectors
 // daily wage: at least `min`, plus `perSkill` M per point of the skill the employee's task uses
 // (only that skill counts: a great cook working as security is paid for his fighting). Skills grow with work,
@@ -36,6 +40,8 @@ LK.APPEAL = { base: 0.2, perRep: 0.005, decorMax: 0.2, decorScale: 6, sizeMax: 0
 LK.TIP = { max: 0.15 };   // a bartender with vendor skill 100 earns guests' tips up to 15 % of the price (to the owner)
 LK.CLAIM_COST = 5000;   // Mariuszki for claiming 6 more rows/columns of land (build mode)
 LK.WAGE = { min: 60, perSkill: 3 };
+// how fast skills grow: every gainXp amount is multiplied by this (1 = the original speed; 0.5 = half)
+LK.XP_RATE = 0.5;
 LK.TASK_SKILLS = { bartender: ['bartending'], cook: ['cooking'], maintenance: ['tinkering', 'electric'], security: ['fighting'], idle: [] };
 LK.RENT = {
   perTile: 8,           // Mariuszki per 1x1 tile of the bar building (bar room, kitchen, storage)

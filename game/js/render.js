@@ -117,6 +117,7 @@ LK.Render = {
     }
     // decals
     for (const d of w.decals) {
+      if (d.type === 'deadRat') { const [rx, ry] = LK.toScreen(d.fx != null ? d.fx : d.x + 0.5, d.fy != null ? d.fy : d.y + 0.5); LK.drawDeadRat(ctx, d, rx, ry, z); continue; }
       const [sx, sy] = LK.toScreen(d.x + 0.5, d.y + 0.5);
       if (d.type === 'debris') {
         // broken furniture: a dust patch with splinters and chunks scattered over it
@@ -256,7 +257,7 @@ LK.Render = {
       };
       for (const o of w.objsWithTag('light', true)) light(o.x + 0.5, o.y + 0.5, LK.FURNITURE[o.type].light, 0.95);
       for (const c of S.chars) if (c.kind === 'player') light(c.x, c.y, 1.6, 0.6);
-      if (S.merchant) light(S.merchant.x, S.merchant.y, 1.4, 0.7);
+      for (const m of LK.merchantList()) light(m.x, m.y, 1.4, 0.7);
       ctx.drawImage(n, 0, 0);
       // warm tint around lights
       ctx.globalCompositeOperation = 'lighter';

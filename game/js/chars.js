@@ -53,7 +53,7 @@ LK.Char = class {
   }
   gainXp(skill, amount) {
     const s = this.skills[skill];
-    this.skills[skill] = Math.min(100, s + amount * (1 + this.int * 0.1) / (1 + s / 25));
+    this.skills[skill] = Math.min(100, s + amount * (LK.XP_RATE != null ? LK.XP_RATE : 1) * (1 + this.int * 0.1) / (1 + s / 25));
   }
   weaponBonus() { return this.weapon ? (LK.GOODS[this.weapon].weapon || 0) : 0; }
 

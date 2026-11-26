@@ -569,6 +569,7 @@ LK.LANGS.pl = {
   'log.cupThrown': '{name} rzucił kuflem w bar!',
   'log.pissed': '{name} nasikał na stół! Obrzydliwe.',
   'log.merchantComing': 'Drogą nadchodzi handlarz!',
+  'log.merchantAnother': 'Nadchodzi kolejny handlarz: {name}!',
   'log.ko': '{name} jest nieprzytomny!',
   'log.koBy': '{name} został znokautowany przez: {by}!',
   'log.storageFull': 'Magazyn jest pełny ({used}/{cap}). Postaw regały, beczki lub skrzynie w magazynie.',
@@ -597,7 +598,7 @@ LK.LANGS.pl = {
   'log.devThrowing': 'Dev: {name} już rzuca.',
   'log.devOrder': 'Dev: wezwano Zakon Świętego Płomienia.',
   'log.devOrderHere': 'Dev: Zakon już tu jest.',
-  'log.devMerchantHere': 'Dev: handlarz już tu jest.',
+  'log.devMerchantHere': 'Dev: nie ma miejsca na kolejnego handlarza (max {max}).',
   'log.devMerchant': 'Dev: wezwano handlarza.',
   'log.devThief': 'Dev: złodziej wchodzi do baru.',
   'log.devHeist': 'Dev: wchodzi włamywacz – prosto do magazynu, obsługa czy nie.',
@@ -710,6 +711,11 @@ LK.LANGS.pl = {
   'name.coowner': 'Współwłaściciel',
   'name.rat': 'Szczur',
   'who.rat': 'szczur',
+  'label.ratDead': 'PLASK!',
+  'log.ratKilled': 'Szczur nie żyje ({by} go dopadł(a)). Podnieś go klawiszem E – mięso do kuchni.',
+  'log.ratPicked': '{name} podnosi martwego szczura: {n}× {item} (zanieś to do magazynu).',
+  'say.ratPicked': ['Obiad!', 'Świeże mięsko.', 'Do gulaszu z tobą.'],
+  'work.ratPick': 'Podnosi szczura',
   'label.squeak': 'PISK!',
   'label.bonk': 'ŁUP!',
   'say.thiefWhat': '…co do…',
@@ -821,6 +827,7 @@ LK.LANGS.pl = {
   'aistate.preach': 'głosi',
   'aistate.arrive': 'nadchodzi',
   'name.merchant': 'Wiesiek Handlarz',
+  'name.merchants': ['Wiesiek Handlarz', 'Halinka Dwa Wózki', 'Stary Zdzichu'],
   'name.brother': 'Brat {name}',
 
   // ---------------------------------------------------------------- pomoc / o grze (HTML)
@@ -844,12 +851,12 @@ LK.LANGS.pl = {
     '<li>Nieprzytomnych pracowników odciąga się do apteczki (budzą się 2× szybciej) albo do magazynu.</li></ul>' +
     '<h3>Magazyn i handlarz</h3><ul>' +
     '<li>Magazyn mieści ograniczoną ilość rzeczy: regały, beczki, skrzynie i kufry w środku dodają miejsca. Gdy kończy się jedzenie lub napoje, pojawia się ostrzeżenie.</li>' +
-    '<li>Od czasu do czasu przychodzi handlarz z kilkoma losowymi towarami. Kupione rzeczy zanieś do magazynu.</li>' +
+    '<li>Codziennie przychodzi handlarz z kilkoma losowymi towarami – czasem czeka dwóch albo trzech naraz, każdy z własnym towarem. Kupione rzeczy zanieś do magazynu.</li>' +
     '<li>Wpisz <b>pożądane ilości</b> w oknie magazynu i zaznacz barmanowi <b>robi zakupy</b>: raz na wizytę handlarza dokupi, czego brakuje (ceny zależą od jego umiejętności handlu), i odłoży to. Możesz też <b>wysłać pracownika po zapasy</b> (okno magazynu): idzie z pieniędzmi, które mu dasz, na 1–4 godziny (dłużej = taniej) i przynosi, ile udźwignie, plus resztę.</li>' +
     '<li>Słupki ringu: z ochroną bójki odbywają się na ringu – tłum to uwielbia i więcej zamawia.</li></ul>' +
     '<h3>Kłopoty</h3><ul>' +
     '<li><b>Złodzieje</b> wyglądają jak zwykli goście. Gdy nikt nie patrzy, zakradają się do magazynu (albo do wynajętego namiotu, albo przez okno magazynu) i szukają towaru i pieniędzy. Pracownik, który ich zobaczy, podnosi alarm, a ochrona atakuje. Znokautuj złodzieja i naciśnij przy nim <b>E</b>, żeby wezwać Zakon: zabiorą go, zwrócą łup i zapłacą 100 M nagrody. Złodziej uderzony w oknie spada z powrotem.</li>' +
-    '<li><b>Szczury</b> kręcą się po mapie i kradną jedzenie z magazynu; trafiony szczur je upuszcza. <b>Ołtarzyk szczura</b> (czasem u handlarza) zaopatrywany codziennie w butelkę <b>orzechówki</b> zamienia jednego szczura w strażnika, który wali złodziei kijem bejsbolowym. Goście nie lubią ołtarzyka, szczury gryzą pusty, a Zakon rozbija go, gdy go zobaczy.</li>' +
+    '<li><b>Szczury</b> kręcą się po mapie i kradną jedzenie z magazynu; trafiony szczur je upuszcza i ucieka (przez kilka kroków powoli – trafiony drugi raz ginie: podnieś go klawiszem <b>E</b>, będzie mięso). <b>Ołtarzyk szczura</b> (czasem u handlarza) zaopatrywany codziennie w butelkę <b>orzechówki</b> zamienia jednego szczura w strażnika, który wali złodziei kijem bejsbolowym. Goście nie lubią ołtarzyka, szczury gryzą pusty, a Zakon rozbija go, gdy go zobaczy.</li>' +
     '<li>Na drodze czasem głosi <b>szalony prorok</b> – między bzdurami trafiają się dobre rady. Pogadaj z nim klawiszem <b>E</b>.</li></ul>' +
     '<h3>Tryb dewelopera (F2)</h3>' +
     '<p><b>T</b> postać pod myszką rzuca kuflem · <b>G</b> przychodzi Zakon · <b>N</b> przychodzi handlarz · <b>R</b> złodziej · <b>Shift+R</b> włamywacz ignorujący obsługę · <b>Y</b> szczur · <b>Shift+Y</b> szczur-strażnik (bez ołtarzyka) · <b>+</b> +1000 M · <b>P</b> gość sika na stół · <b>Shift+P</b> … na namiot na wynajem · <b>X</b> szalony prorok · <b>Z</b> dodaj dowolny przedmiot do magazynu</p>',

@@ -196,14 +196,11 @@ LK.dev = {
     LK.log(LK.t(ok ? 'log.devOrder' : 'log.devOrderHere'), 'warn');
     return ok;
   },
-  // the merchant comes now (walks in from the road)
+  // one more merchant comes now (walks in from the road; the daily schedule is kept)
   callMerchant() {
-    const S = LK.state;
-    if (S.merchant) { LK.log(LK.t('log.devMerchantHere'), 'warn'); return false; }
-    S.nextMerchant = S.time;
-    LK.merchantAI(0);
-    LK.log(LK.t('log.devMerchant'), 'warn');
-    return !!S.merchant;
+    const m = LK.spawnMerchant();
+    LK.log(LK.t(m ? 'log.devMerchant' : 'log.devMerchantHere', { max: LK.MERCHANT.max }), 'warn');
+    return !!m;
   },
   // a thief walks into the bar now
   // the crazy prophet comes now (any hour)

@@ -579,6 +579,7 @@ LK.LANGS.en = {
   'log.cupThrown': '{name} threw a cup at the bar!',
   'log.pissed': '{name} pissed on a table! Disgusting.',
   'log.merchantComing': 'A merchant is coming down the road!',
+  'log.merchantAnother': 'Another merchant is coming: {name}!',
   'log.ko': '{name} is knocked out!',
   'log.koBy': '{name} is knocked out by {by}!',
   'log.storageFull': 'Storage is full ({used}/{cap}). Build shelves, barrels or crates in the storage room.',
@@ -607,8 +608,8 @@ LK.LANGS.en = {
   'log.devThrowing': 'Dev: {name} is already throwing.',
   'log.devOrder': 'Dev: the Order of the Holy Flame was summoned.',
   'log.devOrderHere': 'Dev: the Order is already here.',
-  'log.devMerchantHere': 'Dev: the merchant is already here.',
-  'log.devMerchant': 'Dev: the merchant was called.',
+  'log.devMerchantHere': 'Dev: no room for another merchant (max {max}).',
+  'log.devMerchant': 'Dev: a merchant was called.',
   'log.devThief': 'Dev: a thief is walking into the bar.',
   'log.devHeist': 'Dev: a heist thief is walking in – straight for the storage, staff or not.',
   'log.devThiefFail': 'Dev: no way into the bar for a thief.',
@@ -720,6 +721,11 @@ LK.LANGS.en = {
   'name.coowner': 'Co-owner',
   'name.rat': 'Rat',
   'who.rat': 'rat',
+  'label.ratDead': 'SPLAT!',
+  'log.ratKilled': 'A rat is dead ({by} got it). Pick it up with E – rat meat for the kitchen.',
+  'log.ratPicked': '{name} picked up a dead rat: {n}× {item} (carry it into the storage).',
+  'say.ratPicked': ['Dinner!', 'Fresh meat.', 'Into the stew with you.'],
+  'work.ratPick': 'Picking up the rat',
   'label.squeak': 'SQUEAK!',
   'label.bonk': 'BONK!',
   'say.thiefWhat': '…what the—',
@@ -831,6 +837,7 @@ LK.LANGS.en = {
   'aistate.preach': 'preaching',
   'aistate.arrive': 'coming',
   'name.merchant': 'Wiesiek the Trader',
+  'name.merchants': ['Wiesiek the Trader', 'Halinka Two-Carts', 'Old Zdzichu'],
   'name.brother': 'Brother {name}',
 
   // ---------------------------------------------------------------- help / about (HTML)
@@ -854,12 +861,12 @@ LK.LANGS.en = {
     '<li>Unconscious staff get dragged to an aid kit (wake 2× faster) or to the storage room.</li></ul>' +
     '<h3>Storage and the merchant</h3><ul>' +
     '<li>The storage room holds only so much: shelves, barrels, crates and chests inside it add space. A warning pops up when food or drinks run low.</li>' +
-    '<li>The merchant comes from time to time with a few random goods. Carry what you buy into the storage room.</li>' +
+    '<li>A merchant comes every day with a few random goods – sometimes two or three wait at once, each with his own goods. Carry what you buy into the storage room.</li>' +
     '<li>Write <b>desired amounts</b> in the storage window and tick <b>can restock</b> on a bartender: once per merchant visit he buys what is missing (prices by his vendor skill) and puts it away. Or <b>send an employee for supplies</b> (storage window): he goes out with the money you give him for 1–4 hours (longer = cheaper) and brings back what he can carry plus the change.</li>' +
     '<li>Ring poles: with security, fights happen in a ring – the crowd loves it and orders more.</li></ul>' +
     '<h3>Trouble</h3><ul>' +
     '<li><b>Thieves</b> look like normal guests. When nobody watches they sneak into the storage room (or a rented tent, or through a storage window) and rummage for goods and cash. Staff who see them raise the alarm, security attacks. Knock a thief out and press <b>E</b> next to him to call the Order: they take him away, return what he stole and pay a 100 M reward. A thief hit while climbing through a window falls back.</li>' +
-    '<li><b>Rats</b> wander the map and steal food from the storage; hit one and it drops it. A <b>rat altar</b> (sometimes at the merchant) stocked every day with a bottle of <b>orzechówka</b> turns one rat into a guardian that clubs thieves with a baseball bat. Guests don\'t like the altar, rats gnaw an empty one, and the Order smashes it if they see it.</li>' +
+    '<li><b>Rats</b> wander the map and steal food from the storage; hit one and it drops it and runs (slowly for a few steps – hit it again and it is dead: pick it up with <b>E</b> for rat meat). A <b>rat altar</b> (sometimes at the merchant) stocked every day with a bottle of <b>orzechówka</b> turns one rat into a guardian that clubs thieves with a baseball bat. Guests don\'t like the altar, rats gnaw an empty one, and the Order smashes it if they see it.</li>' +
     '<li>A <b>crazy prophet</b> preaches on the road now and then – between the nonsense there are good hints. Talk to him with <b>E</b>.</li></ul>' +
     '<h3>Developer mode (F2)</h3>' +
     '<p><b>T</b> the character under the mouse throws a cup · <b>G</b> the Order comes · <b>N</b> the merchant comes · <b>R</b> a thief · <b>Shift+R</b> a heist thief who ignores the staff · <b>Y</b> a rat · <b>Shift+Y</b> a protector rat (no altar needed) · <b>+</b> +1000 M · <b>P</b> a guest pisses on a table · <b>Shift+P</b> … on a rental tent · <b>X</b> the crazy prophet · <b>Z</b> add any item to the storage</p>',

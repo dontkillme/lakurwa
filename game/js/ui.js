@@ -609,16 +609,16 @@ LK.ui = {
   },
 
   // ---------------- SHOP ----------------
-  openShop(buyer) {
-    const m = LK.state.merchant;
+  openShop(buyer, m) {
+    m = m || LK.nearMerchant(buyer);
     if (!m) return;
     if (!m.shop) m.shop = LK.makeMerchantStock(buyer.skills.vendor);
-    this.shopBuyer = buyer;
+    this.shopBuyer = buyer; this.shopMerchant = m;
     this.panel = null; this.toggle('shop');
   },
-  closeShop() { if (this.panel === 'shop') this.close(); },
+  closeShop(m) { if (this.panel === 'shop' && (!m || this.shopMerchant === m)) this.close(); },   // m: only his shop
   shopPanel(el) {
-    const S = LK.state, m = S.merchant, b = this.shopBuyer || S.player;
+    const S = LK.state, m = LK.merchantList().includes(this.shopMerchant) ? this.shopMerchant : null, b = this.shopBuyer || S.player;
     if (!m || !m.shop) { el.innerHTML = '<p>' + esc(T('shop.gone')) + '</p>'; return; }
     if (LK.dist(b.x, b.y, m.x, m.y) > 3) { el.innerHTML = '<p>' + esc(T('shop.closer')) + '</p>'; return; }
     const carrying = LK.itemCount((b.cargo || {}).stock, (b.cargo || {}).goods, (b.cargo || {}).furn);

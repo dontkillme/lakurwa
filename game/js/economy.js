@@ -289,15 +289,17 @@ LK.planRestock = function (buyer, shop) {
   }
   return { items: out, cost };
 };
-// the merchant arrived: once per visit one bartender who may restock (random if several) goes
+// a merchant waits: once per merchant one bartender who may restock (random if several) goes. Called every
+// step while he waits (LK.merchantAI), so with several merchants a bartender who is on his way to one goes to
+// the next one afterwards.
 LK.startRestock = function (m) {
   if (m.restockDone) return null;
-  m.restockDone = true;
   const S = LK.state;
-  const can = S.chars.filter(c => c.kind === 'employee' && c.task === 'bartender' && c.canRestock && c.active && !c.hostile);
+  const can = S.chars.filter(c => c.kind === 'employee' && c.task === 'bartender' && c.canRestock && c.active && !c.hostile &&
+    !c.restockFor && !(c.job && c.job.type === 'restock' && c.job.merchant));   // not already going to another merchant
   if (!can.length || !Object.values(S.desired || {}).some(v => v > 0)) return null;
   const c = LK.pick(can);
-  c.restockFor = m;
+  c.restockFor = m; m.restockDone = true;
   return c;
 };
 LK.shopPrice = (item, buyer) => Math.max(1, Math.round(item.base * item.f * (1 - LK.vendorDiscount(buyer))));
@@ -324,7 +326,8 @@ LK.buy = function (item, buyer, n) {
   buyer.load = LK.cargoLoad(buyer.cargo);
   buyer.gainXp('vendor', 0.3 * n);
   if (buyer.load > buyer.carryCap) buyer.say(LK.t('say.heavy', { load: Math.round(buyer.load), cap: buyer.carryCap }));
-  if (buyer.kind === 'player' && S.merchant) S.merchant.say(LK.t('say.merchantStorage'), 3.5);   // the owner bought something
+  const from = buyer.kind === 'player' && LK.nearMerchant(buyer, 4);
+  if (from) from.say(LK.t('say.merchantStorage'), 3.5);   // the owner bought something
   return true;
 };
 

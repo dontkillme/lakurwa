@@ -15,7 +15,7 @@ LK.newGame = function (mapDef) {
       .map(r => { for (const k in r.parts) if (!LK.INGREDIENTS[k]) delete r.parts[k]; return r; }).filter(r => Object.keys(r.parts).length),
     time: 8 * 60, day: 1, simT: 0, speed: 1, brokeDays: 0, history: [],
     today: { income: 0, expense: 0, served: 0, clients: 0, fights: 0 },
-    merchant: null, nextMerchant: 10 * 60, ring: null, applicants: [], over: false,
+    merchants: [], nextMerchant: LK.MERCHANT.firstAt, merchantChain: 0, ring: null, applicants: [], over: false,
     order: { warnings: 0, paidStreak: 0, nextDay: LK.RENT.everyDays, squad: null },
     arrests: [], alarmT: 0, plans: {}, furnCrafted: {}
   };
@@ -48,7 +48,7 @@ LK.joinCoop = function () {
 LK.onKO = function (c) {
   const S = LK.state;
   if (c.kind === 'client') { LK.releaseSeat(c); if (c.order) { const o = c.order; c.order = null; LK.failOrder(o); } }
-  if (c === S.merchant) { S.merchantLeaveAt = S.time; }
+  if (c.kind === 'merchant') c.leaveAt = S.time;
   if (LK.thiefKO) LK.thiefKO(c);
 };
 LK.onWake = function (c) {
@@ -64,9 +64,9 @@ LK.interact = function (p) {
   if (p.job) LK.dropJob(p);
   // the crazy prophet (a hint) or the merchant (the shop): whoever is closer
   const pr = S.chars.find(c => c.kind === 'prophet' && c.active && LK.dist(c.x, c.y, p.x, p.y) < 2.2);
-  const mer = S.merchant && S.merchant.state === 'wait' && LK.dist(p.x, p.y, S.merchant.x, S.merchant.y) < 2.5 ? S.merchant : null;
+  const mer = LK.nearMerchant(p, 2.5);
   if (pr && (!mer || LK.dist(pr.x, pr.y, p.x, p.y) <= LK.dist(mer.x, mer.y, p.x, p.y))) { pr.faceTo(p.x, p.y); LK.prophetSay(pr, true); return; }
-  if (mer) { LK.ui.openShop(p); return; }
+  if (mer) { LK.ui.openShop(p, mer); return; }
   // deliver what we carry
   if (p.carry) {
     const o = p.carry;
@@ -84,6 +84,10 @@ LK.interact = function (p) {
   const guest = S.orders.filter(o => o.state === 'placed' && !o.worker && o.client.active && LK.dist(o.client.x, o.client.y, p.x, p.y) < 1.8 && LK.canReach(p, o.client))   // not through a wall
     .sort((a, b) => LK.dist(a.client.x, a.client.y, p.x, p.y) - LK.dist(b.client.x, b.client.y, p.x, p.y))[0];
   if (guest) { guest.worker = p; p.job = LK.newJob('serve', { order: guest, phase: 'takeHere' }); return; }
+  // a dead rat next to us: pick it up (rat meat, carried into the storage)
+  const deadRat = w.decals.filter(d => LK.isDeadRat(d) && Math.max(Math.abs(d.x - p.tx), Math.abs(d.y - p.ty)) <= 1)
+    .sort((a, b) => LK.dist(a.fx, a.fy, p.x, p.y) - LK.dist(b.fx, b.fy, p.x, p.y))[0];
+  if (deadRat) { p.job = LK.newJob('fix', { target: deadRat, decal: true }); return; }
   // outside the bar: the item under the mouse next to us - take it, or a menu when it has more actions
   const item = LK.pointedItem(p);
   if (item) {
@@ -622,9 +626,8 @@ LK.boot = function () {
   }
   if (/carryshot/.test(location.hash)) {   // dev/screenshots: the owner just bought at the merchant (barrel), a bartender carrying a chest
     const S = LK.state;
-    S.time = S.nextMerchant; LK.merchantAI(0);
-    for (let i = 0; i < 60 * 60 && S.merchant.state !== 'wait'; i++) LK.step(1 / 60);
-    const m = S.merchant, p = S.player;
+    const m = LK.spawnMerchant(), p = S.player;
+    for (let i = 0; i < 60 * 60 && m.state !== 'wait'; i++) LK.step(1 / 60);
     p.x = m.x + 1; p.y = m.y; p.path = [];
     m.shop = LK.makeMerchantStock(0);
     const it = m.shop.find(s => s.cat === 'stock'); S.money = 5000; LK.buy(it, p, 3);
@@ -669,6 +672,22 @@ LK.boot = function () {
     const old = LK.TENT.rentChance; LK.TENT.rentChance = 1; LK.maybeRentTent(c); LK.TENT.rentChance = old;
     if (tents[1]) tents[1].hp = 70;
     LK.centerOn(tents[0].x, tents[0].y); LK.follow = false; LK.ui.setSpeed(0);
+  }
+  if (/deadrat/.test(location.hash)) {   // dev/screenshots: two dead rats next to the owner (one with SPLAT!), a living rat
+    const S = LK.state, w = S.world, p = S.player, sp = w.def.merchantSpot;   // outside, on open ground, zoomed in
+    S.nextMerchant = 1e12;
+    p.x = sp.x + 0.5; p.y = sp.y - 1.5; p.path = [];
+    LK.cam.z = 2; LK.centerOn(p.x, p.y);
+    for (const [dx, dy, fl] of [[1, 1, false], [2, -1, true]]) { const r = LK.spawnRat(); r.x = p.tx + dx + 0.5; r.y = p.ty + dy + 0.5; r.flip = fl; r.path = []; LK.ratHit(r, p); LK.ratHit(r, p); }
+    const r = LK.spawnRat(); r.x = p.tx - 1.5; r.y = p.ty + 1.5; r.path = []; r.update = function (dt) { this.animT += dt; };
+  }
+  if (/merchants/.test(location.hash)) {   // dev/screenshots: three merchants waiting outside, the owner next to them
+    const S = LK.state;
+    S.nextMerchant = 1e12;
+    const ms = [LK.spawnMerchant(), LK.spawnMerchant(), LK.spawnMerchant()].filter(Boolean);
+    for (const m of ms) { m.x = m.spot[0] + 0.5; m.y = m.spot[1] + 0.5; m.path = []; m.state = 'wait'; }
+    const p = S.player; p.x = ms[0].x + 1; p.y = ms[0].y + 1; p.path = [];
+    LK.centerOn(ms[0].x, ms[0].y);
   }
   if (/itemshot/.test(location.hash)) {   // dev/screenshots: the owner outside next to a rat altar, its item menu open (+ghost: build ghost of a lamp outside)
     const S = LK.state, w = S.world, p = S.player, ent = w.entrances()[0];
@@ -750,7 +769,7 @@ LK.boot = function () {
   const pm = /panel=(\w+)/.exec(location.hash);
   const fsm = /fs=([\d.]+)/.exec(location.hash);   // dev/screenshots: text size
   if (fsm) LK.setFontScale(+fsm[1]);
-  if (pm) { if (pm[1] === 'build') LK.ui.toggleBuild(); else if (pm[1] === 'shop') { if (LK.state.merchant) LK.ui.openShop(LK.state.player); } else LK.ui.toggle(pm[1]); }
+  if (pm) { if (pm[1] === 'build') LK.ui.toggleBuild(); else if (pm[1] === 'shop') { if (LK.merchantList().length) LK.ui.openShop(LK.state.player, LK.merchantList()[0]); } else LK.ui.toggle(pm[1]); }
   if (/gopts/.test(location.hash) && LK.ui.panel === 'game') { LK.ui.gameView = 'options'; LK.ui.renderPanel(); }   // dev/screenshots: Options page
   requestAnimationFrame(LK.loop);
 };

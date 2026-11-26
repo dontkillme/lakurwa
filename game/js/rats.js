@@ -1,7 +1,9 @@
 // La Kurwa - the rat, and the rat altar.
 // A rat (kind 'rat', drawn in code: LK.drawRat) wanders the map. Near the storage room it sneaks in and
 // nibbles food (ingredients of kind 'food'), then runs off the map with it. Hit it (owner F, security) and it
-// drops what it took (back into the storage) and runs away very, very fast.
+// drops what it took (back into the storage) and runs away: the first few tiles at a normal pace (so the one who
+// hit it can catch up), then very, very fast. Hit it a second time and it dies: a dead rat (decal 'deadRat') that
+// the owner (E) or maintenance staff pick up as rat meat and carry into the storage.
 // The rat altar (furniture tag 'ratAltar', merchant sometimes, 900 M) can stand anywhere, but guests who see it
 // don't like it (reputation). The owner restocks it every day with one bottle of orzechówka (E next to it).
 // While it is stocked the rat does not steal: when a thief is in the storage room the rat rushes there from
@@ -13,6 +15,10 @@ LK.RAT = {
   gnawDmg: 10, gnawTime: 3, gnawChance: 0.6,   // rats gnaw an empty altar (chance per decision when within 10 tiles)
   spawnEvery: [300, 700],    // seconds between rats (when there is none)
   hp: 12,
+  hitsToKill: 2,             // the second hit kills it
+  fleeSlowTiles: 3, fleeSlowSpeed: 1.1,   // after a hit: this many tiles at this pace before the fast run
+  meat: 1,                   // rat meat (ingredient 'rat') from a dead rat
+  pickTime: 1.5,             // seconds to pick a dead rat up
   wander: [3, 8],            // tiles per wander walk
   wanderSpeed: 1.0, sneakSpeed: 1.15, fleeSpeed: 3.2, rushSpeed: 2.6,   // × normal walking speed
   smellRange: 9,             // tiles to the storage room: he goes for the food
@@ -50,29 +56,56 @@ LK.spawnRat = function (guardian) {
 };
 const ratLootEmpty = r => !Object.keys(r.ratLoot || {}).length;
 const ratLootText = r => Object.entries(r.ratLoot).map(([k, n]) => n + '× ' + LK.ingName(k)).join(', ');
-// flee off the map, very fast
-function flee(r) {
+// flee off the map, very fast; slow: after a hit, the first LK.RAT.fleeSlowTiles tiles at a normal pace
+function flee(r, slow) {
   const w = LK.state.world, ex = r.tx < w.W / 2 ? 0 : w.W - 1;
-  r.speedMul = LK.RAT.fleeSpeed; r.running = false;
-  r.ai = { state: 'flee' };
+  r.speedMul = slow ? LK.RAT.fleeSlowSpeed : LK.RAT.fleeSpeed; r.running = false;
+  r.ai = { state: 'flee', slow: !!slow, fromX: r.x, fromY: r.y };
   if (!r.goTo(ex, LK.pick(w.route)) && !r.goTo(w.W - 1 - ex, w.route[0])) r.kind = 'gone';
 }
-// hit by anyone: drops the food (back into the storage) and runs
+const stopChasing = r => { for (const c of LK.state.chars) if (c.hostile === r) { c.hostile = null; c.path = []; } };
+// a hit rat that has not sped up yet can still be caught (security keeps chasing it)
+LK.ratCatchable = r => r.ai.state !== 'flee' || !!r.ai.slow;
+// hit by anyone: drops the food (back into the storage) and runs; the second hit kills it
 LK.ratHit = function (r, by) {
   const S = LK.state;
-  if (r.ai.state === 'flee') return;
+  if (r.kind !== 'rat' || r.whack) return;                  // gone already / swinging the bat
   r.hurtT = 0.3;
-  LK.fx.push({ type: 'hit', x: r.x, y: r.y, t: 0.5, text: LK.t('label.squeak') });
+  r.ratHits = (r.ratHits || 0) + 1;
+  if (r.ratHits < LK.RAT.hitsToKill) LK.fx.push({ type: 'hit', x: r.x, y: r.y, t: 0.5, text: LK.t('label.squeak') });   // the last one: SPLAT!
   if (!ratLootEmpty(r)) {
     const text = ratLootText(r);
     for (const [k, n] of Object.entries(r.ratLoot)) S.stock[k] = Math.round(((S.stock[k] || 0) + n) * 10) / 10;
     r.ratLoot = {};
     LK.log(LK.t('log.ratDropped', { items: text, by: by ? by.name : '?' }), 'good');
   }
-  r.say(LK.t('say.ratSqueak'), 1.2);
   r.work = null;
-  for (const c of S.chars) if (c.hostile === r) { c.hostile = null; c.path = []; }   // nobody chases it across the map
-  flee(r);
+  if (r.ratHits >= LK.RAT.hitsToKill) { ratDie(r, by); return; }
+  r.say(LK.t('say.ratSqueak'), 1.2);
+  flee(r, true);                                            // a few steps at a normal pace, then very fast
+};
+// dead: it lies where it fell until someone picks it up (LK.pickDeadRat)
+function ratDie(r, by) {
+  const S = LK.state, w = S.world;
+  r.kind = 'gone'; r.path = []; r.work = null;
+  stopChasing(r);
+  const x = Math.max(0, Math.min(w.W - 1, Math.floor(r.x))), y = Math.max(0, Math.min(w.H - 1, Math.floor(r.y)));
+  w.decals.push({ x, y, type: 'deadRat', fx: r.x, fy: r.y, flip: !!r.flip, t: 0 });
+  LK.fx.push({ type: 'hit', x: r.x, y: r.y - 0.2, t: 1, text: LK.t('label.ratDead') });
+  LK.log(LK.t('log.ratKilled', { by: by ? by.name : '?' }), 'good');
+}
+LK.isDeadRat = d => !!(d && d.type === 'deadRat');
+// c picks up a dead rat: rat meat into his hands (stored when he walks into the storage room)
+LK.pickDeadRat = function (c, d) {
+  const w = LK.state.world;
+  if (!w.decals.includes(d)) return false;
+  w.decals = w.decals.filter(x => x !== d);
+  c.cargo = c.cargo || LK.emptyCargo();
+  c.cargo.stock.rat = (c.cargo.stock.rat || 0) + LK.RAT.meat;
+  c.load = LK.cargoLoad(c.cargo);
+  c.say(LK.t('say.ratPicked'), 1.5);
+  LK.log(LK.t('log.ratPicked', { name: c.name, n: LK.RAT.meat, item: LK.ingName('rat') }), 'good');
+  return true;
 };
 
 // what the rat does
@@ -82,6 +115,10 @@ LK.ratAI = function (r, dt) {
   if (r.batT > 0) r.batT -= dt;
   if (a.state === 'whack') return;                         // the bat scene runs on real time (LK.updateWhacks)
   if (a.state === 'flee') {
+    if (a.slow && LK.dist(r.x, r.y, a.fromX, a.fromY) >= R.fleeSlowTiles) {   // far enough: now it really runs
+      a.slow = false; r.speedMul = R.fleeSpeed;
+      stopChasing(r);                                      // nobody chases it across the map
+    }
     if (!r.path.length) {
       if (!ratLootEmpty(r) && !r.reported) { r.reported = true; LK.log(LK.t('log.ratEscaped', { items: ratLootText(r) }), 'bad'); }
       r.kind = 'gone';
@@ -278,14 +315,14 @@ LK.ratNewDay = function () {
 // sx,sy = feet on screen; opt.idol = the golden statue on the altar
 LK.drawRat = function (ctx, c, sx, sy, z, opt) {
   opt = opt || {};
-  const pose = c && LK.whackPose(c);
-  const s = z * (opt.scale || 1) * (pose ? pose.grow : 1), t = c ? c.animT || 0 : 0, moving = c && (c.path.length > 0);
-  const fast = c && c.speedMul > 1.5, f = c && c.flip ? -1 : 1;
-  const body = opt.idol ? '#c9a14a' : '#6e5d50', dark = opt.idol ? '#8a6a26' : '#4b3e35', pink = opt.idol ? '#e0c070' : '#d89a9a';
+  const pose = c && LK.whackPose(c), dead = !!opt.dead;
+  const s = z * (opt.scale || 1) * (pose ? pose.grow : 1), t = c ? c.animT || 0 : 0, moving = c && !dead && (c.path.length > 0);
+  const fast = c && c.speedMul > 1.5, f = (c && c.flip) || opt.flip ? -1 : 1;
+  const body = opt.idol ? '#c9a14a' : dead ? '#5e534b' : '#6e5d50', dark = opt.idol ? '#8a6a26' : '#4b3e35', pink = opt.idol ? '#e0c070' : '#d89a9a';
   const bob = moving ? Math.sin(t * (fast ? 40 : 18)) * 1.5 * s : 0;
   ctx.save();
-  ctx.translate(sx, sy - bob);
-  ctx.scale(f, 1);
+  if (dead) { ctx.translate(sx, sy - 17 * s); ctx.scale(f, -1); }   // on its back, legs up
+  else { ctx.translate(sx, sy - bob); ctx.scale(f, 1); }
   // tail
   ctx.strokeStyle = pink; ctx.lineWidth = 2 * s; ctx.lineCap = 'round';
   ctx.beginPath(); ctx.moveTo(-12 * s, -6 * s);
@@ -305,7 +342,10 @@ LK.drawRat = function (ctx, c, sx, sy, z, opt) {
   ctx.beginPath(); ctx.arc(22 * s, -8.5 * s, 1.6 * s, 0, Math.PI * 2); ctx.fill();                                       // nose
   ctx.beginPath(); ctx.ellipse(8 * s, -16 * s, 3.2 * s, 4 * s, -0.3, 0, Math.PI * 2); ctx.fill();                       // ear
   ctx.fillStyle = opt.idol ? '#5a3a00' : '#111';
-  ctx.beginPath(); ctx.arc(14 * s, -11.5 * s, 1.3 * s, 0, Math.PI * 2); ctx.fill();                                     // eye
+  if (dead) {                                                                                                           // X eye
+    ctx.strokeStyle = '#111'; ctx.lineWidth = 1.2 * s;
+    ctx.beginPath(); ctx.moveTo(12.5 * s, -13 * s); ctx.lineTo(15.5 * s, -10 * s); ctx.moveTo(15.5 * s, -13 * s); ctx.lineTo(12.5 * s, -10 * s); ctx.stroke();
+  } else { ctx.beginPath(); ctx.arc(14 * s, -11.5 * s, 1.3 * s, 0, Math.PI * 2); ctx.fill(); }                          // eye
   // the baseball bat (with a motion trail during the swing)
   if (pose || (c && c.batT > 0)) {
     const ang = pose ? pose.ang : -2.2 + (1 - c.batT / 0.6) * 2.6;
@@ -319,6 +359,12 @@ LK.drawRat = function (ctx, c, sx, sy, z, opt) {
     bat(ang, 1);
   }
   ctx.restore();
+};
+// a dead rat on the ground (decal 'deadRat'): on its back, with a small shadow
+LK.drawDeadRat = function (ctx, d, sx, sy, z) {
+  ctx.fillStyle = 'rgba(0,0,0,0.28)';
+  ctx.beginPath(); ctx.ellipse(sx - 2 * z, sy - 1 * z, 18 * z, 5 * z, 0, 0, Math.PI * 2); ctx.fill();
+  LK.drawRat(ctx, null, sx, sy, z, { dead: true, flip: d.flip });
 };
 // the altar's decoration on top of its stone: the golden rat idol and, when stocked, a bottle
 LK.drawAltarDecor = function (ctx, o, sx, sy, z) {
